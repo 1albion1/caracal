@@ -9,9 +9,12 @@ Connect, browse, and query your databases — without the bloat.</p>
 
 ---
 
-Caracal is a modern database manager in the spirit of SQL Server Management Studio,
-rebuilt for speed: a native Rust core, a ~15 MB standalone executable, instant
-startup, and a UI that stays smooth even on huge result sets.
+Caracal exists because I was tired of SQL Server Management Studio — the wait at
+startup, the weight, the clutter — when all I needed was to connect, browse, and
+query. It keeps the workflows SSMS got right and rebuilds them for speed: a native
+Rust core, a ~15 MB standalone executable, instant startup, and a UI that stays
+smooth even on huge result sets. Now with PostgreSQL and SQLite alongside
+SQL Server and Azure SQL.
 
 ## Features
 
