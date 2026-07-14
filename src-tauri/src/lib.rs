@@ -1,6 +1,7 @@
 mod entra;
 mod models;
 mod mssql;
+mod postgres;
 mod sqlite;
 mod store;
 
@@ -117,6 +118,19 @@ fn forget_secret(connection_id: &str) {
     }
 }
 
+/// The stored password for a password-authenticated connection (postgres,
+/// or mssql with SQL login).
+async fn stored_password(connection: &Connection) -> Result<String, String> {
+    let id = connection.id.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        keyring_entry(&id)?.get_password().map_err(|e| {
+            format!("No stored password for this connection ({e}). Re-create the connection.")
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Resolves the secret needed to open a server connection: stored password
 /// for SQL logins, an Azure AD token for Entra, nothing for Windows auth.
 async fn resolve_secret(
@@ -126,17 +140,7 @@ async fn resolve_secret(
     match connection.auth.as_deref() {
         Some("windows") => Ok(Secret::None),
         Some("entra") => Ok(Secret::AadToken(entra_token(app).await?)),
-        _ => {
-            let id = connection.id.clone();
-            let password = tauri::async_runtime::spawn_blocking(move || {
-                keyring_entry(&id)?.get_password().map_err(|e| {
-                    format!("No stored password for this connection ({e}). Re-create the connection.")
-                })
-            })
-            .await
-            .map_err(|e| e.to_string())??;
-            Ok(Secret::Password(password))
-        }
+        _ => Ok(Secret::Password(stored_password(connection).await?)),
     }
 }
 
@@ -232,9 +236,44 @@ async fn add_connection(
             }
             connection
         }
+        "postgres" => {
+            let host = input.host.clone().unwrap_or_default();
+            if host.trim().is_empty() {
+                return Err("Server host is required.".into());
+            }
+            if input.username.clone().unwrap_or_default().trim().is_empty() {
+                return Err("Username is required.".into());
+            }
+
+            let connection = Connection {
+                id: id.clone(),
+                name: default_name(&input.name, &host),
+                driver: input.driver,
+                host: host.trim().to_string(),
+                database: input.database.trim().to_string(),
+                color: input.color,
+                port: input.port,
+                username: input.username.clone(),
+                auth: Some("sql".into()),
+                trust_cert: input.trust_cert,
+            };
+
+            let password = input.password.clone().unwrap_or_default();
+            postgres::test_connection(&connection, &password).await?;
+
+            let entry_id = id.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                keyring_entry(&entry_id)?
+                    .set_password(&password)
+                    .map_err(|e| format!("Could not store password: {e}"))
+            })
+            .await
+            .map_err(|e| e.to_string())??;
+            connection
+        }
         other => {
             return Err(format!(
-                "Driver '{other}' is not supported yet — SQLite and SQL Server are available."
+                "Driver '{other}' is not supported yet — SQLite, SQL Server, and PostgreSQL are available."
             ));
         }
     };
@@ -274,6 +313,10 @@ async fn list_databases(
             let secret = resolve_secret(&app, &connection).await?;
             mssql::list_databases(&connection, secret).await
         }
+        "postgres" => {
+            let password = stored_password(&connection).await?;
+            postgres::list_databases(&connection, &password).await
+        }
         other => Err(format!("Driver '{other}' is not supported yet.")),
     }
 }
@@ -295,6 +338,10 @@ async fn list_tables(
         "mssql" => {
             let secret = resolve_secret(&app, &connection).await?;
             mssql::list_tables(&connection, secret, database.as_deref()).await
+        }
+        "postgres" => {
+            let password = stored_password(&connection).await?;
+            postgres::list_tables(&connection, &password, database.as_deref()).await
         }
         other => Err(format!("Driver '{other}' is not supported yet.")),
     }
@@ -318,6 +365,10 @@ async fn run_query(
         "mssql" => {
             let secret = resolve_secret(&app, &connection).await?;
             mssql::run_query(&connection, secret, database.as_deref(), &sql).await
+        }
+        "postgres" => {
+            let password = stored_password(&connection).await?;
+            postgres::run_query(&connection, &password, database.as_deref(), &sql).await
         }
         other => Err(format!("Driver '{other}' is not supported yet.")),
     }

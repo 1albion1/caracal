@@ -21,6 +21,8 @@ startup, and a UI that stays smooth even on huge result sets.
   - Multi-database servers: browse and switch between all databases on a server,
     with instant name filtering
   - Named instances (`server\SQLEXPRESS`) resolved automatically via SQL Browser
+- **PostgreSQL** — password auth with TLS support, full multi-database browsing
+  (tables, views, materialized views)
 - **SQLite** — open existing files or create new databases with a native file picker
 - **Query editor** — syntax highlighting, autocompletion, `Ctrl+Enter` to run,
   and SSMS-style **run-selection**: highlight part of a script and run only that
@@ -57,7 +59,7 @@ The UI renders in Windows' built-in WebView2 — no embedded Chromium.
 
 ## Roadmap
 
-- PostgreSQL and MySQL drivers
+- MySQL driver
 - Cancel running queries
 - Multiple result sets per batch
 - Export results to CSV / copy as insert

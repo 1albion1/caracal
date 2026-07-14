@@ -31,7 +31,7 @@ function selectTopSql(driver: Connection["driver"], table: TableMeta): string {
   if (driver === "sqlite") {
     return `SELECT *\nFROM "${table.name}"\nLIMIT 1000;`;
   }
-  return `SELECT *\nFROM ${table.schema}.${table.name}\nLIMIT 1000;`;
+  return `SELECT *\nFROM "${table.schema}"."${table.name}"\nLIMIT 1000;`;
 }
 
 function App() {
@@ -84,7 +84,8 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnectionId]);
 
-  const multiDatabase = activeConnection?.driver === "mssql";
+  const multiDatabase =
+    activeConnection?.driver === "mssql" || activeConnection?.driver === "postgres";
 
   useEffect(() => {
     if (!activeConnectionId) {

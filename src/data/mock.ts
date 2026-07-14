@@ -209,7 +209,9 @@ export const mockProvider: DataProvider = {
   async listDatabases(connectionId: string) {
     await delay(60);
     const conn = CONNECTIONS.find((c) => c.id === connectionId);
-    return conn?.driver === "mssql" ? ["AppDb", "Analytics", "master"] : [];
+    if (conn?.driver === "mssql") return ["AppDb", "Analytics", "master"];
+    if (conn?.driver === "postgres") return ["appdb", "analytics", "postgres"];
+    return [];
   },
 
   async listTables(_connectionId: string, _database?: string) {

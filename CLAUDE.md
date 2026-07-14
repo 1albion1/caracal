@@ -77,6 +77,15 @@ Rust side (`src-tauri/src/`):
   in lib.rs, expiry minus 120s slack). Silent refresh happens automatically;
   interactive auth omits `prompt=` so browser SSO usually completes without
   clicks even when it does open.
+- `postgres.rs` — PostgreSQL driver (tokio-postgres + postgres-native-tls,
+  "prefer" TLS mode, `trust_cert` accepts self-signed). Uses the **simple query
+  protocol** everywhere: all values arrive as text (no per-type mapping; numbers
+  display as strings), multi-statement scripts work natively, first result set
+  shown. Row counts are planner estimates from `pg_class.reltuples`. Auth is
+  always username+password (`auth: "sql"`, password in keyring via
+  `stored_password`). CAVEAT: `simple_query` buffers the whole result server
+  response in memory before the 10k cap applies — huge unLIMITed SELECTs can
+  spike memory. Added 0.2.0; verified against a live server by Albion 2026-07-14.
 - `sqlite.rs` — SQLite driver (rusqlite, `bundled` feature so SQLite is
   compiled in — no DLLs). Introspection via `sqlite_master` + `PRAGMA table_info`.
   Query results are capped at `MAX_ROWS = 10_000` materialized rows but the full row

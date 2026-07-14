@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 — 2026-07-14
+
+- PostgreSQL driver: password authentication, TLS (with self-signed
+  certificate option), multi-database browsing, tables/views/materialized
+  views with row estimates, multi-statement scripts via the simple query
+  protocol
+- Connection dialog adapts per driver (port defaults, auth methods)
+
 ## 0.1.0 — 2026-07-14
 
 First release.

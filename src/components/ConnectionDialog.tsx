@@ -8,10 +8,12 @@ const COLORS = ["#4ade80", "#60a5fa", "#facc15", "#f87171", "#c084fc", "#fb923c"
 
 const DRIVERS: { value: Driver; label: string; enabled: boolean }[] = [
   { value: "mssql", label: "SQL Server / Azure SQL", enabled: true },
+  { value: "postgres", label: "PostgreSQL", enabled: true },
   { value: "sqlite", label: "SQLite", enabled: true },
-  { value: "postgres", label: "PostgreSQL (soon)", enabled: false },
   { value: "mysql", label: "MySQL (soon)", enabled: false },
 ];
+
+const DEFAULT_PORTS: Partial<Record<Driver, string>> = { mssql: "1433", postgres: "5432" };
 
 const AUTH_METHODS: { value: AuthMethod; label: string }[] = [
   { value: "sql", label: "SQL Server Authentication" },
@@ -73,11 +75,20 @@ export function ConnectionDialog({ onSubmit, onClose }: ConnectionDialogProps) {
     return `${recent.name} — ${target}`;
   }
 
-  const isServer = driver === "mssql";
-  const hasInstance = host.includes("\\");
+  const isServer = driver === "mssql" || driver === "postgres";
+  // Named instances and auth-method choice are SQL Server concepts;
+  // postgres always authenticates with username + password.
+  const hasInstance = driver === "mssql" && host.includes("\\");
+  const effectiveAuth: AuthMethod = driver === "postgres" ? "sql" : auth;
   const canSubmit = isServer
-    ? host.trim() !== "" && (auth !== "sql" || username.trim() !== "")
+    ? host.trim() !== "" && (effectiveAuth !== "sql" || username.trim() !== "")
     : database.trim() !== "";
+
+  function changeDriver(next: Driver) {
+    setDriver(next);
+    setPort(DEFAULT_PORTS[next] ?? "");
+    setError(null);
+  }
 
   async function browse() {
     // A new database uses a save dialog (pick a location), an existing one an open dialog.
@@ -92,6 +103,7 @@ export function ConnectionDialog({ onSubmit, onClose }: ConnectionDialogProps) {
     setBusy(true);
     setError(null);
     try {
+      const defaultPort = driver === "postgres" ? 5432 : 1433;
       const input: NewConnectionInput = isServer
         ? {
             name,
@@ -100,10 +112,10 @@ export function ConnectionDialog({ onSubmit, onClose }: ConnectionDialogProps) {
             color,
             createIfMissing: false,
             host: host.trim(),
-            port: hasInstance ? undefined : parseInt(port, 10) || 1433,
-            auth,
-            username: auth === "sql" ? username.trim() : undefined,
-            password: auth === "sql" ? password : undefined,
+            port: hasInstance ? undefined : parseInt(port, 10) || defaultPort,
+            auth: effectiveAuth,
+            username: effectiveAuth === "sql" ? username.trim() : undefined,
+            password: effectiveAuth === "sql" ? password : undefined,
             trustCert,
           }
         : { name, driver, database, color, createIfMissing };
@@ -148,7 +160,7 @@ export function ConnectionDialog({ onSubmit, onClose }: ConnectionDialogProps) {
           id="conn-driver"
           className="form-input"
           value={driver}
-          onChange={(e) => setDriver(e.target.value as Driver)}
+          onChange={(e) => changeDriver(e.target.value as Driver)}
         >
           {DRIVERS.map((d) => (
             <option key={d.value} value={d.value} disabled={!d.enabled}>
@@ -175,7 +187,11 @@ export function ConnectionDialog({ onSubmit, onClose }: ConnectionDialogProps) {
                 <input
                   id="conn-host"
                   className="form-input"
-                  placeholder={"localhost\\SQLEXPRESS or myserver.database.windows.net"}
+                  placeholder={
+                    driver === "postgres"
+                      ? "localhost or db.example.com"
+                      : "localhost\\SQLEXPRESS or myserver.database.windows.net"
+                  }
                   value={host}
                   onChange={(e) => setHost(e.target.value)}
                 />
@@ -198,32 +214,36 @@ export function ConnectionDialog({ onSubmit, onClose }: ConnectionDialogProps) {
             <input
               id="conn-db"
               className="form-input"
-              placeholder="master"
+              placeholder={driver === "postgres" ? "postgres" : "master"}
               value={database}
               onChange={(e) => setDatabase(e.target.value)}
             />
 
-            <label className="form-label" htmlFor="conn-auth">Authentication</label>
-            <select
-              id="conn-auth"
-              className="form-input"
-              value={auth}
-              onChange={(e) => setAuth(e.target.value as AuthMethod)}
-            >
-              {AUTH_METHODS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+            {driver === "mssql" && (
+              <>
+                <label className="form-label" htmlFor="conn-auth">Authentication</label>
+                <select
+                  id="conn-auth"
+                  className="form-input"
+                  value={auth}
+                  onChange={(e) => setAuth(e.target.value as AuthMethod)}
+                >
+                  {AUTH_METHODS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
 
-            {auth === "sql" && (
+            {effectiveAuth === "sql" && (
               <>
                 <label className="form-label" htmlFor="conn-user">Login</label>
                 <input
                   id="conn-user"
                   className="form-input"
-                  placeholder="sa"
+                  placeholder={driver === "postgres" ? "postgres" : "sa"}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
@@ -241,7 +261,7 @@ export function ConnectionDialog({ onSubmit, onClose }: ConnectionDialogProps) {
                 </div>
               </>
             )}
-            {auth === "entra" && (
+            {driver === "mssql" && auth === "entra" && (
               <div className="form-hint">
                 Your browser opens to sign in with your Microsoft account — like SSMS.
                 You stay signed in afterwards; no Azure CLI needed.
