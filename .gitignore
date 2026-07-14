@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# local icon-cache-busting copy for the Desktop shortcut
+src-tauri/icons/caracal-v2.ico
