@@ -23,6 +23,7 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarPr
           }}
         >
           <span className={`tab-title ${tab.running ? "running" : ""}`}>{tab.title}</span>
+          {tab.database && <span className="tab-db">{tab.database}</span>}
           <button
             className="tab-close"
             onClick={(e) => {

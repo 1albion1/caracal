@@ -79,11 +79,16 @@ pub async fn list_tables(
 ) -> Result<Vec<TableMeta>, String> {
     let client = connect(conn, password, database).await?;
 
-    // Tables, partitioned tables, views, and materialized views with
-    // planner row estimates (instant even on huge tables; -1 = never analyzed).
+    // Tables, child partitions, views, and materialized views with planner
+    // row estimates (instant even on huge tables; -1 = never analyzed).
     let messages = client
         .simple_query(
-            "SELECT n.nspname, c.relname, GREATEST(c.reltuples, 0)::bigint \
+            "SELECT n.nspname, c.relname, \
+             CASE WHEN c.relispartition THEN 'partition' \
+                  WHEN c.relkind = 'v' THEN 'view' \
+                  WHEN c.relkind = 'm' THEN 'materialized_view' \
+                  ELSE 'table' END, \
+             GREATEST(c.reltuples, 0)::bigint \
              FROM pg_class c \
              JOIN pg_namespace n ON n.oid = c.relnamespace \
              WHERE c.relkind IN ('r', 'p', 'v', 'm') \
@@ -100,12 +105,36 @@ pub async fn list_tables(
             SimpleQueryMessage::Row(row) => Some(TableMeta {
                 schema: row.get(0).unwrap_or_default().to_string(),
                 name: row.get(1).unwrap_or_default().to_string(),
-                row_count: row.get(2).and_then(|v| v.parse().ok()).unwrap_or(0),
+                kind: row.get(2).unwrap_or("table").to_string(),
+                row_count: row.get(3).and_then(|v| v.parse().ok()).unwrap_or(0),
                 columns: Vec::new(),
             }),
             _ => None,
         })
         .collect();
+
+    // Stored procedures (prokind 'p'; plain functions are not listed yet).
+    let messages = client
+        .simple_query(
+            "SELECT n.nspname, p.proname \
+             FROM pg_proc p \
+             JOIN pg_namespace n ON n.oid = p.pronamespace \
+             WHERE p.prokind = 'p' \
+               AND n.nspname NOT IN ('pg_catalog', 'information_schema') \
+             ORDER BY n.nspname, p.proname",
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    tables.extend(messages.into_iter().filter_map(|msg| match msg {
+        SimpleQueryMessage::Row(row) => Some(TableMeta {
+            schema: row.get(0).unwrap_or_default().to_string(),
+            name: row.get(1).unwrap_or_default().to_string(),
+            kind: "procedure".to_string(),
+            row_count: 0,
+            columns: Vec::new(),
+        }),
+        _ => None,
+    }));
 
     let messages = client
         .simple_query(

@@ -60,6 +60,7 @@ const TABLES: MockTable[] = [
   {
     schema: "dbo",
     name: "customers",
+    kind: "table",
     rowCount: 5000,
     columns: cols(
       ["id", "int"],
@@ -84,6 +85,7 @@ const TABLES: MockTable[] = [
   {
     schema: "dbo",
     name: "orders",
+    kind: "table",
     rowCount: 25000,
     columns: cols(
       ["id", "int"],
@@ -105,6 +107,7 @@ const TABLES: MockTable[] = [
   {
     schema: "dbo",
     name: "products",
+    kind: "table",
     rowCount: 320,
     columns: cols(
       ["id", "int"],
@@ -124,6 +127,7 @@ const TABLES: MockTable[] = [
   {
     schema: "billing",
     name: "invoices",
+    kind: "table",
     rowCount: 18000,
     columns: cols(
       ["id", "int"],

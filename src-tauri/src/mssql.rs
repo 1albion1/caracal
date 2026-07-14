@@ -117,15 +117,15 @@ pub async fn list_tables(
 ) -> Result<Vec<TableMeta>, String> {
     let mut client = connect(conn, secret, database).await?;
 
-    // Tables and views with approximate row counts from partition metadata
-    // (fast even on very large tables; views report 0).
-    let tables_sql = "SELECT s.name AS schema_name, o.name AS object_name, \
+    // Tables, views, and stored procedures; approximate row counts from
+    // partition metadata (fast even on very large tables; views report 0).
+    let tables_sql = "SELECT s.name AS schema_name, o.name AS object_name, o.type, \
          CAST(ISNULL(SUM(CASE WHEN p.index_id IN (0, 1) THEN p.rows END), 0) AS bigint) AS row_count \
          FROM sys.objects o \
          JOIN sys.schemas s ON s.schema_id = o.schema_id \
          LEFT JOIN sys.partitions p ON p.object_id = o.object_id \
-         WHERE o.type IN ('U', 'V') \
-         GROUP BY s.name, o.name \
+         WHERE o.type IN ('U', 'V', 'P') \
+         GROUP BY s.name, o.name, o.type \
          ORDER BY s.name, o.name";
     let rows = client
         .simple_query(tables_sql)
@@ -138,6 +138,12 @@ pub async fn list_tables(
     let mut tables: Vec<TableMeta> = rows
         .iter()
         .map(|row| {
+            let object_type = row
+                .try_get::<&str, _>(2)
+                .map_err(|e| e.to_string())?
+                .unwrap_or_default()
+                .trim()
+                .to_string();
             Ok(TableMeta {
                 schema: row
                     .try_get::<&str, _>(0)
@@ -149,7 +155,13 @@ pub async fn list_tables(
                     .map_err(|e| e.to_string())?
                     .unwrap_or_default()
                     .to_string(),
-                row_count: row.try_get::<i64, _>(2).map_err(|e| e.to_string())?.unwrap_or(0),
+                kind: match object_type.as_str() {
+                    "V" => "view",
+                    "P" => "procedure",
+                    _ => "table",
+                }
+                .to_string(),
+                row_count: row.try_get::<i64, _>(3).map_err(|e| e.to_string())?.unwrap_or(0),
                 columns: Vec::new(),
             })
         })

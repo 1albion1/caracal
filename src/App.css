@@ -238,14 +238,29 @@ select:focus {
   word-break: break-word;
 }
 
+.tree-kind {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 6px;
+  border-radius: 4px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.tree-kind:hover {
+  background: var(--bg-hover);
+}
+
 .tree-schema {
   display: flex;
   align-items: center;
   gap: 5px;
   width: 100%;
-  padding: 4px 6px;
+  padding: 4px 6px 4px 20px;
   border-radius: 4px;
-  color: var(--text);
+  color: var(--text-muted);
   font-weight: 600;
 }
 
@@ -265,7 +280,7 @@ select:focus {
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 4px 6px 4px 22px;
+  padding: 4px 6px 4px 36px;
   border-radius: 4px;
   color: var(--text);
 }
@@ -322,6 +337,22 @@ select:focus {
 }
 
 .tab-title.running {
+  color: #4fc1ff;
+}
+
+.tab-db {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-active);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.tab.active .tab-db {
   color: #4fc1ff;
 }
 

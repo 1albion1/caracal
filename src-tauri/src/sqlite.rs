@@ -30,20 +30,20 @@ pub fn list_tables(path: &str) -> Result<Vec<TableMeta>, String> {
     let conn = open(path, false)?;
     let mut stmt = conn
         .prepare(
-            "SELECT name FROM sqlite_master \
+            "SELECT name, type FROM sqlite_master \
              WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' \
              ORDER BY name",
         )
         .map_err(|e| e.to_string())?;
-    let names: Vec<String> = stmt
-        .query_map([], |row| row.get(0))
+    let names: Vec<(String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(|e| e.to_string())?
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
     drop(stmt);
 
     let mut tables = Vec::with_capacity(names.len());
-    for name in names {
+    for (name, object_type) in names {
         let columns = table_columns(&conn, &name)?;
         let row_count = conn
             .query_row(
@@ -55,6 +55,7 @@ pub fn list_tables(path: &str) -> Result<Vec<TableMeta>, String> {
         tables.push(TableMeta {
             schema: "main".into(),
             name,
+            kind: if object_type == "view" { "view" } else { "table" }.into(),
             row_count,
             columns,
         });

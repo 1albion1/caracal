@@ -1,6 +1,16 @@
-import { ChevronDown, ChevronRight, Database, Plus, Table2, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Database,
+  Eye,
+  Layers,
+  Plus,
+  Table2,
+  Terminal,
+  Trash2,
+} from "lucide-react";
 import { useMemo, useState } from "react";
-import type { Connection, TableMeta } from "../types";
+import type { Connection, ObjectKind, TableMeta } from "../types";
 
 interface SidebarProps {
   connections: Connection[];
@@ -21,6 +31,18 @@ interface SidebarProps {
 
 const numberFormat = new Intl.NumberFormat("en-US");
 
+/** Object-explorer sections in display order; sections without items are hidden. */
+const KIND_SECTIONS: { kind: ObjectKind; label: string; icon: typeof Table2 }[] = [
+  { kind: "table", label: "Tables", icon: Table2 },
+  { kind: "partition", label: "Partitions", icon: Layers },
+  { kind: "view", label: "Views", icon: Eye },
+  { kind: "materialized_view", label: "Materialized Views", icon: Layers },
+  { kind: "procedure", label: "Procedures", icon: Terminal },
+];
+
+/** Row counts are meaningless for procedures. */
+const COUNTLESS_KINDS: ObjectKind[] = ["procedure"];
+
 export function Sidebar({
   connections,
   activeConnectionId,
@@ -37,7 +59,7 @@ export function Sidebar({
   tablesError,
   onOpenTable,
 }: SidebarProps) {
-  const [collapsedSchemas, setCollapsedSchemas] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
   const [dbFilter, setDbFilter] = useState("");
 
@@ -47,23 +69,31 @@ export function Sidebar({
     return databases.filter((db) => db.toLowerCase().includes(needle));
   }, [databases, dbFilter]);
 
-  const bySchema = useMemo(() => {
-    const groups = new Map<string, TableMeta[]>();
+  /** kind → schema → objects, after applying the name filter. */
+  const sections = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    for (const table of tables) {
-      if (needle && !`${table.schema}.${table.name}`.toLowerCase().includes(needle)) continue;
-      const group = groups.get(table.schema) ?? [];
-      group.push(table);
-      groups.set(table.schema, group);
-    }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+    return KIND_SECTIONS.map((section) => {
+      const groups = new Map<string, TableMeta[]>();
+      for (const table of tables) {
+        if (table.kind !== section.kind) continue;
+        if (needle && !`${table.schema}.${table.name}`.toLowerCase().includes(needle)) continue;
+        const group = groups.get(table.schema) ?? [];
+        group.push(table);
+        groups.set(table.schema, group);
+      }
+      return {
+        ...section,
+        schemas: [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)),
+        count: [...groups.values()].reduce((sum, list) => sum + list.length, 0),
+      };
+    }).filter((section) => section.count > 0);
   }, [tables, filter]);
 
-  function toggleSchema(schema: string) {
-    setCollapsedSchemas((prev) => {
+  function toggle(key: string) {
+    setCollapsed((prev) => {
       const next = new Set(prev);
-      if (next.has(schema)) next.delete(schema);
-      else next.add(schema);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }
@@ -141,45 +171,71 @@ export function Sidebar({
         </>
       )}
 
-      <div className="sidebar-section-title">Tables</div>
+      <div className="sidebar-section-title">Objects</div>
       <input
         className="table-filter"
-        placeholder="Filter tables…"
+        placeholder="Filter objects…"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
       />
       <div className="table-tree">
         {tablesLoading && <div className="tree-hint">Loading schema…</div>}
         {!tablesLoading && tablesError && <div className="tree-hint tree-error">{tablesError}</div>}
-        {!tablesLoading && !tablesError && tables.length === 0 && (
+        {!tablesLoading && !tablesError && sections.length === 0 && (
           <div className="tree-hint">
             {activeConnectionId
-              ? "No tables in this database."
-              : "Select a connection to browse tables."}
+              ? filter
+                ? "No objects match."
+                : "No objects in this database."
+              : "Select a connection to browse objects."}
           </div>
         )}
-        {bySchema.map(([schema, schemaTables]) => {
-          const collapsed = collapsedSchemas.has(schema);
+        {sections.map((section) => {
+          const sectionCollapsed = collapsed.has(section.kind);
+          const Icon = section.icon;
           return (
-            <div key={schema}>
-              <button className="tree-schema" onClick={() => toggleSchema(schema)}>
-                {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                <span>{schema}</span>
-                <span className="tree-count">{schemaTables.length}</span>
+            <div key={section.kind}>
+              <button className="tree-kind" onClick={() => toggle(section.kind)}>
+                {sectionCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                <Icon size={13} />
+                <span>{section.label}</span>
+                <span className="tree-count">{section.count}</span>
               </button>
-              {!collapsed &&
-                schemaTables.map((table) => (
-                  <button
-                    key={`${table.schema}.${table.name}`}
-                    className="tree-table"
-                    onClick={() => onOpenTable(table)}
-                    title={`Open ${table.schema}.${table.name} (${numberFormat.format(table.rowCount)} rows)`}
-                  >
-                    <Table2 size={13} />
-                    <span className="tree-table-name">{table.name}</span>
-                    <span className="tree-count">{numberFormat.format(table.rowCount)}</span>
-                  </button>
-                ))}
+              {!sectionCollapsed &&
+                section.schemas.map(([schema, objects]) => {
+                  const schemaKey = `${section.kind}.${schema}`;
+                  const schemaCollapsed = collapsed.has(schemaKey);
+                  return (
+                    <div key={schemaKey}>
+                      <button className="tree-schema" onClick={() => toggle(schemaKey)}>
+                        {schemaCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                        <span>{schema}</span>
+                        <span className="tree-count">{objects.length}</span>
+                      </button>
+                      {!schemaCollapsed &&
+                        objects.map((table) => (
+                          <button
+                            key={`${table.schema}.${table.name}`}
+                            className="tree-table"
+                            onClick={() => onOpenTable(table)}
+                            title={
+                              COUNTLESS_KINDS.includes(table.kind)
+                                ? `${table.schema}.${table.name}`
+                                : `${table.schema}.${table.name} (${numberFormat.format(table.rowCount)} rows)`
+                            }
+                          >
+                            <Icon size={13} />
+                            <span className="tree-table-name">{table.name}</span>
+                            {!COUNTLESS_KINDS.includes(table.kind) && (
+                              <span className="tree-count">
+                                {numberFormat.format(table.rowCount)}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                    </div>
+                  );
+                })}
             </div>
           );
         })}

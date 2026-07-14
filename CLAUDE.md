@@ -98,10 +98,17 @@ Rust side (`src-tauri/src/`):
 - `models.rs` — serde structs, `rename_all = "camelCase"` to match
   [src/types.ts](src/types.ts) exactly. Keep both sides in sync when changing shapes.
 
-Frontend components (`src/components/`): `Sidebar` (connections + schema tree),
-`TabBar`, `SqlEditor` (CodeMirror, Ctrl+Enter runs), `ResultsGrid` (TanStack Virtual —
-only visible rows in the DOM), `StatusBar`, `ConnectionDialog` (add connection; native
-file picker via `@tauri-apps/plugin-dialog`, only shown inside Tauri).
+Frontend components (`src/components/`): `Sidebar` (connections, database list,
+object explorer: kind sections → schema groups → objects; `TableMeta.kind` is
+"table" | "partition" | "view" | "materialized_view" | "procedure"), `TabBar`
+(tabs are BOUND to the database they were opened under, shown as a badge —
+`QueryTab.database`; unbound tabs follow the sidebar selection), `SqlEditor`
+(CodeMirror, Ctrl+Enter runs selection-or-all; schema-aware autocompletion fed
+from the sidebar's `tables` via lang-sql `schema` option + per-driver dialect),
+`ResultsGrid` (TanStack Virtual, resizable columns), `StatusBar`,
+`ConnectionDialog` (per-driver fields; native file picker via
+`@tauri-apps/plugin-dialog`, only shown inside Tauri). Clicking a procedure
+opens an EXEC/CALL template WITHOUT auto-running (procedures can mutate data).
 
 ## Conventions
 

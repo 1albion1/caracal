@@ -52,9 +52,12 @@ export interface ColumnMeta {
   dataType: string;
 }
 
+export type ObjectKind = "table" | "partition" | "view" | "materialized_view" | "procedure";
+
 export interface TableMeta {
   schema: string;
   name: string;
+  kind: ObjectKind;
   rowCount: number;
   columns: ColumnMeta[];
 }
@@ -72,6 +75,8 @@ export interface QueryTab {
   id: string;
   title: string;
   sql: string;
+  /** Database this tab is bound to (like an SSMS query window); null = connection default. */
+  database: string | null;
   result: QueryResult | null;
   error: string | null;
   running: boolean;

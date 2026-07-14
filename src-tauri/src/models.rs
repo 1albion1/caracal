@@ -35,6 +35,8 @@ pub struct ColumnMeta {
 pub struct TableMeta {
     pub schema: String,
     pub name: String,
+    /// "table" | "partition" | "view" | "materialized_view" | "procedure"
+    pub kind: String,
     pub row_count: i64,
     pub columns: Vec<ColumnMeta>,
 }

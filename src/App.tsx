@@ -11,12 +11,13 @@ import "./App.css";
 
 let tabCounter = 0;
 
-function newTab(title?: string, sql = ""): QueryTab {
+function newTab(title?: string, sql = "", database: string | null = null): QueryTab {
   tabCounter += 1;
   return {
     id: `tab-${tabCounter}`,
     title: title ?? `Query ${tabCounter}`,
     sql,
+    database,
     result: null,
     error: null,
     running: false,
@@ -123,11 +124,11 @@ function App() {
   }, []);
 
   const runQuery = useCallback(
-    async (tabId: string, sql: string) => {
+    async (tabId: string, sql: string, database: string | null) => {
       if (!activeConnectionId) return;
       patchTab(tabId, { running: true, error: null });
       try {
-        const result = await provider.runQuery(activeConnectionId, sql, activeDatabase ?? undefined);
+        const result = await provider.runQuery(activeConnectionId, sql, database ?? undefined);
         patchTab(tabId, { running: false, result, error: null });
       } catch (err) {
         patchTab(tabId, {
@@ -137,7 +138,7 @@ function App() {
         });
       }
     },
-    [activeConnectionId, activeDatabase, patchTab],
+    [activeConnectionId, patchTab],
   );
 
   const runActiveTab = useCallback(
@@ -145,22 +146,36 @@ function App() {
       const tab = tabs.find((t) => t.id === activeTabId);
       if (!tab || tab.running) return;
       const sql = sqlOverride?.trim() ? sqlOverride : tab.sql;
-      void runQuery(tab.id, sql);
+      // A tab stays bound to the database it was opened under (SSMS-style);
+      // unbound tabs follow the sidebar's current selection.
+      void runQuery(tab.id, sql, tab.database ?? activeDatabase);
     },
-    [tabs, activeTabId, runQuery],
+    [tabs, activeTabId, activeDatabase, runQuery],
   );
 
   function openTable(table: TableMeta) {
     if (!activeConnection) return;
+    // Procedures get an execution template but are NOT auto-run — they can
+    // modify data; the user reviews parameters and hits Run themselves.
+    if (table.kind === "procedure") {
+      const sql =
+        activeConnection.driver === "postgres"
+          ? `CALL "${table.schema}"."${table.name}"();`
+          : `EXEC [${table.schema}].[${table.name}];`;
+      const tab = newTab(table.name, sql, activeDatabase);
+      setTabs((prev) => [...prev, tab]);
+      setActiveTabId(tab.id);
+      return;
+    }
     const sql = selectTopSql(activeConnection.driver, table);
-    const tab = newTab(table.name, sql);
+    const tab = newTab(table.name, sql, activeDatabase);
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
-    void runQuery(tab.id, sql);
+    void runQuery(tab.id, sql, activeDatabase);
   }
 
   function addTab() {
-    const tab = newTab();
+    const tab = newTab(undefined, "", activeDatabase);
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
   }
@@ -260,6 +275,8 @@ function App() {
               <SqlEditor
                 value={activeTab.sql}
                 running={activeTab.running}
+                tables={tables}
+                driver={activeConnection?.driver ?? null}
                 onChange={(sql) => patchTab(activeTab.id, { sql })}
                 onRun={runActiveTab}
               />
@@ -277,7 +294,11 @@ function App() {
             />
           </>
         )}
-        <StatusBar connection={activeConnection} database={activeDatabase} tab={activeTab} />
+        <StatusBar
+          connection={activeConnection}
+          database={activeTab?.database ?? activeDatabase}
+          tab={activeTab}
+        />
       </div>
       {dialogOpen && (
         <ConnectionDialog onSubmit={addConnection} onClose={() => setDialogOpen(false)} />

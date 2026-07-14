@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-07-14
+
+- Object explorer: the sidebar now groups objects into Tables, Partitions,
+  Views, Materialized Views, and Procedures (per driver support); clicking a
+  procedure opens an EXEC/CALL template without running it
+- Query tabs are bound to the database they were opened under (SSMS-style)
+  and show it as a badge; the status bar follows the active tab
+- Schema-aware autocompletion: table and column-name suggestions fed from the
+  live database schema, with the correct SQL dialect per driver
+
 ## 0.2.0 — 2026-07-14
 
 - PostgreSQL driver: password authentication, TLS (with self-signed
