@@ -10,7 +10,7 @@ import { Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
-import { Loader2, Play } from "lucide-react";
+import { Download, Loader2, Play } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import type { Driver, TableMeta } from "../types";
 
@@ -20,9 +20,12 @@ interface SqlEditorProps {
   /** Live schema of the active database — feeds autocompletion. */
   tables: TableMeta[];
   driver: Driver | null;
+  /** Whether the active tab has a result to export. */
+  hasResult: boolean;
   onChange(sql: string): void;
   /** Runs the given SQL; undefined means "run the whole editor content". */
   onRun(sqlOverride?: string): void;
+  onExport(): void;
 }
 
 const DIALECTS = {
@@ -38,7 +41,16 @@ function selectionOf(view: EditorView): string | undefined {
   return sel.empty ? undefined : view.state.sliceDoc(sel.from, sel.to);
 }
 
-export function SqlEditor({ value, running, tables, driver, onChange, onRun }: SqlEditorProps) {
+export function SqlEditor({
+  value,
+  running,
+  tables,
+  driver,
+  hasResult,
+  onChange,
+  onRun,
+  onExport,
+}: SqlEditorProps) {
   const cmRef = useRef<ReactCodeMirrorRef>(null);
   const [hasSelection, setHasSelection] = useState(false);
 
@@ -89,6 +101,16 @@ export function SqlEditor({ value, running, tables, driver, onChange, onRun }: S
           {running ? "Running…" : hasSelection ? "Run selection" : "Run"}
         </button>
         <span className="editor-hint">Ctrl+Enter runs the selection, or everything if nothing is selected · Ctrl+Space for suggestions</span>
+        <span className="toolbar-spacer" />
+        <button
+          className="btn btn-slim"
+          onClick={onExport}
+          disabled={!hasResult || running}
+          title="Export the current result to CSV, Excel, or JSON"
+        >
+          <Download size={14} />
+          Export…
+        </button>
       </div>
       <CodeMirror
         ref={cmRef}

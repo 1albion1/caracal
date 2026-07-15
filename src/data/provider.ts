@@ -1,4 +1,5 @@
 import type {
+  CellValue,
   Connection,
   NewConnectionInput,
   QueryResult,
@@ -23,4 +24,6 @@ export interface DataProvider {
   listDatabases(connectionId: string): Promise<string[]>;
   listTables(connectionId: string, database?: string): Promise<TableMeta[]>;
   runQuery(connectionId: string, sql: string, database?: string): Promise<QueryResult>;
+  /** Writes rows to a file (format by extension: csv/xlsx/json); returns row count. */
+  exportResult(path: string, columns: string[], rows: CellValue[][]): Promise<number>;
 }

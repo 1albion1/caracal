@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { NewConnectionInput } from "../types";
+import type { CellValue, NewConnectionInput } from "../types";
 import type { DataProvider } from "./provider";
 
 /** Serves the DataProvider interface from the Rust backend via IPC. */
@@ -14,4 +14,6 @@ export const tauriProvider: DataProvider = {
     invoke("list_tables", { connectionId, database }),
   runQuery: (connectionId: string, sql: string, database?: string) =>
     invoke("run_query", { connectionId, sql, database }),
+  exportResult: (path: string, columns: string[], rows: CellValue[][]) =>
+    invoke("export_result", { path, columns, rows }),
 };

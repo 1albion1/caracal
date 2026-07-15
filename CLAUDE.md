@@ -105,7 +105,12 @@ object explorer: kind sections → schema groups → objects; `TableMeta.kind` i
 `QueryTab.database`; unbound tabs follow the sidebar selection), `SqlEditor`
 (CodeMirror, Ctrl+Enter runs selection-or-all; schema-aware autocompletion fed
 from the sidebar's `tables` via lang-sql `schema` option + per-driver dialect),
-`ResultsGrid` (TanStack Virtual, resizable columns), `StatusBar`,
+`ResultsGrid` (TanStack Virtual, resizable columns), `StatusBar` (shows
+transient `notice` messages, e.g. export confirmations), `TabBar` context menu
+(close others/right/all). `export.rs` writes results to csv/xlsx/json by
+extension (csv = UTF-8 BOM for Excel; xlsx via rust_xlsxwriter; exports the
+grid's materialized rows, i.e. capped at 10k — the notice says so when
+truncated). Table clicks generate SELECT TOP/LIMIT 100 with explicit columns.
 `ConnectionDialog` (per-driver fields; native file picker via
 `@tauri-apps/plugin-dialog`, only shown inside Tauri). Clicking a procedure
 opens an EXEC/CALL template WITHOUT auto-running (procedures can mutate data).

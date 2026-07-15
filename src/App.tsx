@@ -1,3 +1,4 @@
+import { save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConnectionDialog } from "./components/ConnectionDialog";
 import { ResultsGrid } from "./components/ResultsGrid";
@@ -24,15 +25,21 @@ function newTab(title?: string, sql = "", database: string | null = null): Query
   };
 }
 
-/** First-N-rows SQL in the active connection's dialect. */
+/** First-100-rows SQL with explicit column names, in the connection's dialect. */
 function selectTopSql(driver: Connection["driver"], table: TableMeta): string {
   if (driver === "mssql") {
-    return `SELECT TOP 1000 *\nFROM [${table.schema}].[${table.name}];`;
+    const list = table.columns.length
+      ? table.columns.map((c) => `[${c.name}]`).join(",\n       ")
+      : "*";
+    return `SELECT TOP 100 ${list}\nFROM [${table.schema}].[${table.name}];`;
   }
+  const list = table.columns.length
+    ? table.columns.map((c) => `"${c.name}"`).join(",\n       ")
+    : "*";
   if (driver === "sqlite") {
-    return `SELECT *\nFROM "${table.name}"\nLIMIT 1000;`;
+    return `SELECT ${list}\nFROM "${table.name}"\nLIMIT 100;`;
   }
-  return `SELECT *\nFROM "${table.schema}"."${table.name}"\nLIMIT 1000;`;
+  return `SELECT ${list}\nFROM "${table.schema}"."${table.name}"\nLIMIT 100;`;
 }
 
 function App() {
@@ -48,7 +55,15 @@ function App() {
   const [editorHeight, setEditorHeight] = useState(220);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [demoBusy, setDemoBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const dragState = useRef<{ startY: number; startHeight: number } | null>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
+
+  function showNotice(message: string) {
+    setNotice(message);
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 8000);
+  }
 
   const activeConnection = connections.find((c) => c.id === activeConnectionId) ?? null;
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
@@ -192,6 +207,27 @@ function App() {
     });
   }
 
+  function closeAllTabs() {
+    const tab = newTab(undefined, "", activeDatabase);
+    setTabs([tab]);
+    setActiveTabId(tab.id);
+  }
+
+  function closeOtherTabs(id: string) {
+    setTabs((prev) => prev.filter((t) => t.id === id));
+    setActiveTabId(id);
+  }
+
+  function closeTabsToRight(id: string) {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      if (idx < 0) return prev;
+      const kept = prev.slice(0, idx + 1);
+      if (!kept.some((t) => t.id === activeTabId)) setActiveTabId(id);
+      return kept;
+    });
+  }
+
   async function addConnection(input: NewConnectionInput) {
     const connection = await provider.addConnection(input);
     setConnections((prev) => [...prev, connection]);
@@ -226,6 +262,35 @@ function App() {
       setTablesError(err instanceof Error ? err.message : String(err));
     } finally {
       setDemoBusy(false);
+    }
+  }
+
+  async function exportActiveResult() {
+    const tab = tabs.find((t) => t.id === activeTabId);
+    const result = tab?.result;
+    if (!tab || !result || result.rows.length === 0) return;
+    const path = await save({
+      defaultPath: `${tab.title.replace(/[^\w.-]+/g, "_")}.csv`,
+      filters: [
+        { name: "CSV (Excel compatible)", extensions: ["csv"] },
+        { name: "Excel workbook", extensions: ["xlsx"] },
+        { name: "JSON", extensions: ["json"] },
+      ],
+    });
+    if (!path) return;
+    try {
+      const written = await provider.exportResult(
+        path,
+        result.columns.map((c) => c.name),
+        result.rows,
+      );
+      const truncated =
+        result.totalRows > result.rows.length
+          ? ` (first ${written.toLocaleString()} of ${result.totalRows.toLocaleString()} — re-run with a filter for the rest)`
+          : "";
+      showNotice(`Exported ${written.toLocaleString()} rows to ${path}${truncated}`);
+    } catch (err) {
+      showNotice(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -267,6 +332,9 @@ function App() {
           activeTabId={activeTabId}
           onSelect={setActiveTabId}
           onClose={closeTab}
+          onCloseOthers={closeOtherTabs}
+          onCloseRight={closeTabsToRight}
+          onCloseAll={closeAllTabs}
           onNew={addTab}
         />
         {activeTab && (
@@ -277,8 +345,10 @@ function App() {
                 running={activeTab.running}
                 tables={tables}
                 driver={activeConnection?.driver ?? null}
+                hasResult={(activeTab.result?.rows.length ?? 0) > 0}
                 onChange={(sql) => patchTab(activeTab.id, { sql })}
                 onRun={runActiveTab}
+                onExport={() => void exportActiveResult()}
               />
             </div>
             <div
@@ -298,6 +368,7 @@ function App() {
           connection={activeConnection}
           database={activeTab?.database ?? activeDatabase}
           tab={activeTab}
+          notice={notice}
         />
       </div>
       {dialogOpen && (

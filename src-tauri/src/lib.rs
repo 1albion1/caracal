@@ -1,4 +1,5 @@
 mod entra;
+mod export;
 mod models;
 mod mssql;
 mod postgres;
@@ -375,6 +376,17 @@ async fn run_query(
 }
 
 #[tauri::command]
+async fn export_result(
+    path: String,
+    columns: Vec<String>,
+    rows: Vec<Vec<serde_json::Value>>,
+) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || export::export(&path, &columns, &rows))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn create_demo_database(
     app: tauri::AppHandle,
     store: State<'_, ConnectionStore>,
@@ -429,6 +441,7 @@ pub fn run() {
             list_databases,
             list_tables,
             run_query,
+            export_result,
             create_demo_database
         ])
         .run(tauri::generate_context!())

@@ -223,6 +223,10 @@ export const mockProvider: DataProvider = {
     return TABLES.map(({ makeRow: _makeRow, ...meta }) => meta);
   },
 
+  async exportResult(): Promise<number> {
+    throw new Error("Export is only available in the desktop app.");
+  },
+
   async runQuery(_connectionId: string, sql: string, _database?: string) {
     const started = performance.now();
     await delay(120 + Math.random() * 250);

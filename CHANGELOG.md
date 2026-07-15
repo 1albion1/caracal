@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 — 2026-07-15
+
+- Export query results to CSV (Excel-compatible UTF-8 BOM), Excel .xlsx
+  (typed numbers, bold headers), or JSON — Export button next to Run,
+  format chosen in the native save dialog
+- Opening a table now generates `SELECT TOP 100` / `LIMIT 100` with explicit
+  column names instead of `SELECT *`
+- Tab context menu: right-click for Close, Close others, Close tabs to the
+  right, Close all
+- Status bar shows transient notices (export confirmations, truncation hints)
+
 ## 0.3.0 — 2026-07-14
 
 - Object explorer: the sidebar now groups objects into Tables, Partitions,

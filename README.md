@@ -31,6 +31,7 @@ SQL Server and Azure SQL.
   and SSMS-style **run-selection**: highlight part of a script and run only that
 - **Results grid** — virtualized scrolling through 10,000 rows without stutter,
   drag-to-resize columns, double-click to auto-fit
+- **Export** — save any result to CSV (Excel-compatible), Excel .xlsx, or JSON
 - **Query tabs** — work on several queries side by side
 - **Connection manager** — color-coded saved connections, recent-connection
   prefill, one-click seeded demo database
@@ -65,8 +66,7 @@ The UI renders in Windows' built-in WebView2 — no embedded Chromium.
 - MySQL driver
 - Cancel running queries
 - Multiple result sets per batch
-- Export results to CSV / copy as insert
-- Schema-aware autocompletion
+- Copy rows as INSERT statements
 
 ## Known limitations
 

@@ -1,6 +1,6 @@
 [package]
 name = "caracal"
-version = "0.3.0"
+version = "0.4.0"
 description = "A fast, featherlight SQL client for Windows"
 authors = ["Albion Berisha"]
 edition = "2021"
@@ -39,4 +39,5 @@ sha2 = "0.10"
 base64 = "0.22"
 url = "2"
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+rust_xlsxwriter = "0.96.0"
 

@@ -380,6 +380,36 @@ select:focus {
   color: var(--text);
 }
 
+.context-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border-radius: 4px;
+  text-align: left;
+  color: var(--text);
+}
+
+.context-menu button:hover:not(:disabled) {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.context-menu button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
 /* ---------- SQL editor ---------- */
 
 .editor-pane {
@@ -584,8 +614,23 @@ select:focus {
   font-size: 12px;
 }
 
+.status-left {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-right {
   white-space: nowrap;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.btn-slim {
+  padding: 4px 10px;
+  font-weight: 400;
 }
 
 /* ---------- Modal ---------- */
