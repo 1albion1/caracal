@@ -227,6 +227,70 @@ export const mockProvider: DataProvider = {
     throw new Error("Export is only available in the desktop app.");
   },
 
+  async explainQuery(_connectionId: string, _sql: string, _database?: string) {
+    await delay(120);
+    return {
+      columns: [{ name: "QUERY PLAN", dataType: "text" }],
+      rows: [
+        ["Seq Scan on customers  (cost=0.00..12.50 rows=250 width=64)"],
+        ["  Filter: (city = 'Hamburg')"],
+      ] as CellValue[][],
+      totalRows: 2,
+      durationMs: 3,
+    } satisfies QueryResult;
+  },
+
+  async analyzeQuery(_connectionId: string, _sql: string, _database?: string) {
+    await delay(160);
+    return {
+      label: "Hash Join",
+      detail: "Hash Cond: (orders.customer_id = customers.id)",
+      rows: 25000,
+      timeMs: 4.2,
+      cost: 812,
+      parallel: false,
+      extra: [
+        ["Node Type", "Hash Join"],
+        ["Join Type", "Inner"],
+        ["Total Cost", "812.00"],
+        ["Actual Total Time", "4.200"],
+      ],
+      children: [
+        {
+          label: "Seq Scan on orders",
+          detail: null,
+          rows: 25000,
+          timeMs: 1.1,
+          cost: 400,
+          extra: [["Relation Name", "orders"], ["Actual Rows", "25000"]],
+          parallel: true,
+          children: [],
+        },
+        {
+          label: "Hash",
+          detail: null,
+          rows: 5000,
+          timeMs: 2.8,
+          cost: 210,
+          parallel: false,
+          extra: [["Hash Buckets", "8192"]],
+          children: [
+            {
+              label: "Seq Scan on customers",
+              detail: "Filter: (city = 'Hamburg')",
+              rows: 5000,
+              timeMs: 2.5,
+              cost: 180,
+              parallel: false,
+              extra: [["Filter", "(city = 'Hamburg')"], ["Rows Removed by Filter", "495"]],
+              children: [],
+            },
+          ],
+        },
+      ],
+    };
+  },
+
   async runQuery(_connectionId: string, sql: string, _database?: string) {
     const started = performance.now();
     await delay(120 + Math.random() * 250);

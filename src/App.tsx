@@ -1,6 +1,7 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConnectionDialog } from "./components/ConnectionDialog";
+import { PlanGraph } from "./components/PlanGraph";
 import { ResultsGrid } from "./components/ResultsGrid";
 import { Sidebar } from "./components/Sidebar";
 import { SqlEditor } from "./components/SqlEditor";
@@ -20,6 +21,7 @@ function newTab(title?: string, sql = "", database: string | null = null): Query
     sql,
     database,
     result: null,
+    plan: null,
     error: null,
     running: false,
   };
@@ -141,14 +143,50 @@ function App() {
   const runQuery = useCallback(
     async (tabId: string, sql: string, database: string | null) => {
       if (!activeConnectionId) return;
-      patchTab(tabId, { running: true, error: null });
+      patchTab(tabId, { running: true, error: null, plan: null });
       try {
         const result = await provider.runQuery(activeConnectionId, sql, database ?? undefined);
-        patchTab(tabId, { running: false, result, error: null });
+        patchTab(tabId, { running: false, result, error: null, plan: null });
       } catch (err) {
         patchTab(tabId, {
           running: false,
           result: null,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [activeConnectionId, patchTab],
+  );
+
+  const explainToGrid = useCallback(
+    async (tabId: string, sql: string, database: string | null) => {
+      if (!activeConnectionId) return;
+      patchTab(tabId, { running: true, error: null, plan: null });
+      try {
+        const result = await provider.explainQuery(activeConnectionId, sql, database ?? undefined);
+        patchTab(tabId, { running: false, result, error: null, plan: null });
+      } catch (err) {
+        patchTab(tabId, {
+          running: false,
+          result: null,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [activeConnectionId, patchTab],
+  );
+
+  const analyzeToGraph = useCallback(
+    async (tabId: string, sql: string, database: string | null) => {
+      if (!activeConnectionId) return;
+      patchTab(tabId, { running: true, error: null });
+      try {
+        const plan = await provider.analyzeQuery(activeConnectionId, sql, database ?? undefined);
+        patchTab(tabId, { running: false, plan, result: null, error: null });
+      } catch (err) {
+        patchTab(tabId, {
+          running: false,
+          plan: null,
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -166,6 +204,26 @@ function App() {
       void runQuery(tab.id, sql, tab.database ?? activeDatabase);
     },
     [tabs, activeTabId, activeDatabase, runQuery],
+  );
+
+  const explainActiveTab = useCallback(
+    (sqlOverride?: string) => {
+      const tab = tabs.find((t) => t.id === activeTabId);
+      if (!tab || tab.running) return;
+      const sql = sqlOverride?.trim() ? sqlOverride : tab.sql;
+      void explainToGrid(tab.id, sql, tab.database ?? activeDatabase);
+    },
+    [tabs, activeTabId, activeDatabase, explainToGrid],
+  );
+
+  const analyzeActiveTab = useCallback(
+    (sqlOverride?: string) => {
+      const tab = tabs.find((t) => t.id === activeTabId);
+      if (!tab || tab.running) return;
+      const sql = sqlOverride?.trim() ? sqlOverride : tab.sql;
+      void analyzeToGraph(tab.id, sql, tab.database ?? activeDatabase);
+    },
+    [tabs, activeTabId, activeDatabase, analyzeToGraph],
   );
 
   function openTable(table: TableMeta) {
@@ -348,6 +406,8 @@ function App() {
                 hasResult={(activeTab.result?.rows.length ?? 0) > 0}
                 onChange={(sql) => patchTab(activeTab.id, { sql })}
                 onRun={runActiveTab}
+                onExplain={explainActiveTab}
+                onAnalyze={analyzeActiveTab}
                 onExport={() => void exportActiveResult()}
               />
             </div>
@@ -357,11 +417,15 @@ function App() {
               onPointerMove={onDrag}
               onPointerUp={endDrag}
             />
-            <ResultsGrid
-              result={activeTab.result}
-              error={activeTab.error}
-              running={activeTab.running}
-            />
+            {activeTab.plan && !activeTab.running && !activeTab.error ? (
+              <PlanGraph plan={activeTab.plan} />
+            ) : (
+              <ResultsGrid
+                result={activeTab.result}
+                error={activeTab.error}
+                running={activeTab.running}
+              />
+            )}
           </>
         )}
         <StatusBar

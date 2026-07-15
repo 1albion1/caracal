@@ -62,6 +62,21 @@ export interface TableMeta {
   columns: ColumnMeta[];
 }
 
+export interface PlanNode {
+  label: string;
+  detail: string | null;
+  rows: number | null;
+  /** Actual time in ms, inclusive of children (PostgreSQL only). */
+  timeMs: number | null;
+  /** Subtree cost (SQL Server, or PostgreSQL estimate). */
+  cost: number | null;
+  /** Raw per-operator attributes for the detail panel. */
+  extra: [string, string][];
+  /** True when this operator ran across multiple threads/workers. */
+  parallel: boolean;
+  children: PlanNode[];
+}
+
 export interface QueryResult {
   columns: ColumnMeta[];
   rows: CellValue[][];
@@ -78,6 +93,8 @@ export interface QueryTab {
   /** Database this tab is bound to (like an SSMS query window); null = connection default. */
   database: string | null;
   result: QueryResult | null;
+  /** Execution-plan tree from Analyze, shown as a flowchart instead of the grid. */
+  plan: PlanNode | null;
   error: string | null;
   running: boolean;
 }

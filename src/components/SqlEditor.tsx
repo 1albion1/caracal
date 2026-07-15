@@ -10,7 +10,7 @@ import { Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
-import { Download, Loader2, Play } from "lucide-react";
+import { Download, Gauge, ListTree, Loader2, Play } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import type { Driver, TableMeta } from "../types";
 
@@ -25,6 +25,10 @@ interface SqlEditorProps {
   onChange(sql: string): void;
   /** Runs the given SQL; undefined means "run the whole editor content". */
   onRun(sqlOverride?: string): void;
+  /** Shows the estimated execution plan for the given SQL (does not run it). */
+  onExplain(sqlOverride?: string): void;
+  /** Runs the query and shows the actual plan with per-step timing. */
+  onAnalyze(sqlOverride?: string): void;
   onExport(): void;
 }
 
@@ -49,6 +53,8 @@ export function SqlEditor({
   hasResult,
   onChange,
   onRun,
+  onExplain,
+  onAnalyze,
   onExport,
 }: SqlEditorProps) {
   const cmRef = useRef<ReactCodeMirrorRef>(null);
@@ -68,13 +74,20 @@ export function SqlEditor({
     const { dialect, defaultSchema } = DIALECTS[driver ?? "mssql"];
     return [
       sql({ dialect, schema, defaultSchema, upperCaseKeywords: true }),
-      // Highest precedence so Ctrl+Enter isn't swallowed by the default keymap.
+      // Highest precedence so shortcuts aren't swallowed by the default keymap.
       Prec.highest(
         keymap.of([
           {
             key: "Ctrl-Enter",
             run: (view) => {
               onRun(selectionOf(view));
+              return true;
+            },
+          },
+          {
+            key: "Ctrl-Shift-Enter",
+            run: (view) => {
+              onExplain(selectionOf(view));
               return true;
             },
           },
@@ -86,11 +99,21 @@ export function SqlEditor({
         }
       }),
     ];
-  }, [onRun, schema, driver]);
+  }, [onRun, onExplain, schema, driver]);
 
   function runFromButton() {
     const view = cmRef.current?.view;
     onRun(view ? selectionOf(view) : undefined);
+  }
+
+  function explainFromButton() {
+    const view = cmRef.current?.view;
+    onExplain(view ? selectionOf(view) : undefined);
+  }
+
+  function analyzeFromButton() {
+    const view = cmRef.current?.view;
+    onAnalyze(view ? selectionOf(view) : undefined);
   }
 
   return (
@@ -100,7 +123,25 @@ export function SqlEditor({
           {running ? <Loader2 size={14} className="spin" /> : <Play size={14} />}
           {running ? "Running…" : hasSelection ? "Run selection" : "Run"}
         </button>
-        <span className="editor-hint">Ctrl+Enter runs the selection, or everything if nothing is selected · Ctrl+Space for suggestions</span>
+        <button
+          className="btn btn-slim"
+          onClick={explainFromButton}
+          disabled={running}
+          title="Show the estimated execution plan (Ctrl+Shift+Enter) — does not run the query"
+        >
+          <ListTree size={14} />
+          Explain
+        </button>
+        <button
+          className="btn btn-slim"
+          onClick={analyzeFromButton}
+          disabled={running}
+          title="Run the query and show the actual plan with per-step timing — this EXECUTES the query"
+        >
+          <Gauge size={14} />
+          Analyze
+        </button>
+        <span className="editor-hint">Ctrl+Enter runs · Ctrl+Shift+Enter explains · Ctrl+Space suggests</span>
         <span className="toolbar-spacer" />
         <button
           className="btn btn-slim"

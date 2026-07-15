@@ -6,7 +6,7 @@ mod postgres;
 mod sqlite;
 mod store;
 
-use models::{Connection, NewConnection, QueryResult, RecentConnection, TableMeta};
+use models::{Connection, NewConnection, PlanNode, QueryResult, RecentConnection, TableMeta};
 use mssql::Secret;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -376,6 +376,60 @@ async fn run_query(
 }
 
 #[tauri::command]
+async fn explain_query(
+    app: tauri::AppHandle,
+    store: State<'_, ConnectionStore>,
+    connection_id: String,
+    sql: String,
+    database: Option<String>,
+) -> Result<QueryResult, String> {
+    let connection = store.get(&connection_id).ok_or("Unknown connection.")?;
+    match connection.driver.as_str() {
+        "sqlite" => {
+            tauri::async_runtime::spawn_blocking(move || sqlite::explain(&connection.database, &sql))
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        "mssql" => {
+            let secret = resolve_secret(&app, &connection).await?;
+            mssql::explain(&connection, secret, database.as_deref(), &sql).await
+        }
+        "postgres" => {
+            let password = stored_password(&connection).await?;
+            postgres::explain(&connection, &password, database.as_deref(), &sql).await
+        }
+        other => Err(format!("Driver '{other}' is not supported yet.")),
+    }
+}
+
+#[tauri::command]
+async fn analyze_query(
+    app: tauri::AppHandle,
+    store: State<'_, ConnectionStore>,
+    connection_id: String,
+    sql: String,
+    database: Option<String>,
+) -> Result<PlanNode, String> {
+    let connection = store.get(&connection_id).ok_or("Unknown connection.")?;
+    match connection.driver.as_str() {
+        "sqlite" => {
+            tauri::async_runtime::spawn_blocking(move || sqlite::analyze_plan(&connection.database, &sql))
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        "mssql" => {
+            let secret = resolve_secret(&app, &connection).await?;
+            mssql::analyze_plan(&connection, secret, database.as_deref(), &sql).await
+        }
+        "postgres" => {
+            let password = stored_password(&connection).await?;
+            postgres::analyze_plan(&connection, &password, database.as_deref(), &sql).await
+        }
+        other => Err(format!("Driver '{other}' is not supported yet.")),
+    }
+}
+
+#[tauri::command]
 async fn export_result(
     path: String,
     columns: Vec<String>,
@@ -441,6 +495,8 @@ pub fn run() {
             list_databases,
             list_tables,
             run_query,
+            explain_query,
+            analyze_query,
             export_result,
             create_demo_database
         ])

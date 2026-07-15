@@ -103,14 +103,25 @@ object explorer: kind sections → schema groups → objects; `TableMeta.kind` i
 "table" | "partition" | "view" | "materialized_view" | "procedure"), `TabBar`
 (tabs are BOUND to the database they were opened under, shown as a badge —
 `QueryTab.database`; unbound tabs follow the sidebar selection), `SqlEditor`
-(CodeMirror, Ctrl+Enter runs selection-or-all; schema-aware autocompletion fed
-from the sidebar's `tables` via lang-sql `schema` option + per-driver dialect),
+(CodeMirror, Ctrl+Enter runs selection-or-all; Ctrl+Shift+Enter explains;
+schema-aware autocompletion fed from the sidebar's `tables` via lang-sql
+`schema` option + per-driver dialect),
 `ResultsGrid` (TanStack Virtual, resizable columns), `StatusBar` (shows
 transient `notice` messages, e.g. export confirmations), `TabBar` context menu
 (close others/right/all). `export.rs` writes results to csv/xlsx/json by
 extension (csv = UTF-8 BOM for Excel; xlsx via rust_xlsxwriter; exports the
 grid's materialized rows, i.e. capped at 10k — the notice says so when
 truncated). Table clicks generate SELECT TOP/LIMIT 100 with explicit columns.
+Each driver has an `explain` fn (postgres `EXPLAIN`, mssql `SET SHOWPLAN_ALL ON`
+in its own batch then the stmt, sqlite `EXPLAIN QUERY PLAN`) — all estimated
+plans that do NOT execute the query; dispatched via the `explain_query` command.
+`analyze_plan` fns DO execute the query and return a `PlanNode` tree (rendered
+as a flowchart by `PlanGraph.tsx`): postgres `EXPLAIN (ANALYZE, BUFFERS, FORMAT
+JSON)` parsed from JSON; mssql `SET STATISTICS XML ON` then parse the actual
+showplan XML with `roxmltree` (real `ActualElapsedms` per operator, `nearest`/
+`child_relops` helpers walk the RelOp tree); sqlite `EXPLAIN QUERY PLAN`
+(structure only). Nodes carry rows/timeMs/cost/extra[]/parallel; the UI heat-
+colors by self-metric and shows a click-through detail panel. Via `analyze_query`.
 `ConnectionDialog` (per-driver fields; native file picker via
 `@tauri-apps/plugin-dialog`, only shown inside Tauri). Clicking a procedure
 opens an EXEC/CALL template WITHOUT auto-running (procedures can mutate data).

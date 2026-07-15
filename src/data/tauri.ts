@@ -14,6 +14,10 @@ export const tauriProvider: DataProvider = {
     invoke("list_tables", { connectionId, database }),
   runQuery: (connectionId: string, sql: string, database?: string) =>
     invoke("run_query", { connectionId, sql, database }),
+  explainQuery: (connectionId: string, sql: string, database?: string) =>
+    invoke("explain_query", { connectionId, sql, database }),
+  analyzeQuery: (connectionId: string, sql: string, database?: string) =>
+    invoke("analyze_query", { connectionId, sql, database }),
   exportResult: (path: string, columns: string[], rows: CellValue[][]) =>
     invoke("export_result", { path, columns, rows }),
 };

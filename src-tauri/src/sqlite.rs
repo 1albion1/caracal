@@ -1,4 +1,4 @@
-use crate::models::{ColumnMeta, QueryResult, TableMeta};
+use crate::models::{ColumnMeta, PlanNode, QueryResult, TableMeta};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection as SqliteConnection, OpenFlags};
 use serde_json::Value;
@@ -81,6 +81,91 @@ fn table_columns(conn: &SqliteConnection, table: &str) -> Result<Vec<ColumnMeta>
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
     Ok(columns)
+}
+
+/// Query plan via EXPLAIN QUERY PLAN — shows how SQLite will scan/search
+/// tables and which indexes it uses. Does not execute the statement.
+pub fn explain(path: &str, sql: &str) -> Result<QueryResult, String> {
+    let trimmed = sql.trim().trim_end_matches(';').trim();
+    if trimmed.is_empty() {
+        return Err("Empty query.".into());
+    }
+    run_query(path, &format!("EXPLAIN QUERY PLAN {trimmed}"))
+}
+
+/// Query-plan tree via EXPLAIN QUERY PLAN (structure only — SQLite reports no
+/// per-step timing). Rows carry id/parent columns that form the tree.
+pub fn analyze_plan(path: &str, sql: &str) -> Result<PlanNode, String> {
+    let trimmed = sql.trim().trim_end_matches(';').trim();
+    if trimmed.is_empty() {
+        return Err("Empty query.".into());
+    }
+    let result = run_query(path, &format!("EXPLAIN QUERY PLAN {trimmed}"))?;
+    let col = |name: &str| result.columns.iter().position(|c| c.name == name);
+    let (id_i, parent_i, detail_i) = match (col("id"), col("parent"), col("detail")) {
+        (Some(a), Some(b), Some(c)) => (a, b, c),
+        _ => return Err("Unexpected EXPLAIN QUERY PLAN output.".into()),
+    };
+
+    let mut nodes: Vec<(i64, i64, PlanNode)> = result
+        .rows
+        .iter()
+        .map(|r| {
+            let id = r.get(id_i).and_then(|v| v.as_i64()).unwrap_or(0);
+            let parent = r.get(parent_i).and_then(|v| v.as_i64()).unwrap_or(0);
+            let label = r
+                .get(detail_i)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            (
+                id,
+                parent,
+                PlanNode {
+                    label,
+                    detail: None,
+                    rows: None,
+                    time_ms: None,
+                    cost: None,
+                    extra: Vec::new(),
+                    parallel: false,
+                    children: Vec::new(),
+                },
+            )
+        })
+        .collect();
+
+    for i in (0..nodes.len()).rev() {
+        let (_, parent, _) = nodes[i];
+        if parent == 0 {
+            continue;
+        }
+        let child = nodes[i].2.clone();
+        let mut attached = false;
+        if let Some(p) = nodes.iter_mut().find(|(id, _, _)| *id == parent) {
+            p.2.children.insert(0, child);
+            attached = true;
+        }
+        if attached {
+            nodes[i].1 = -1;
+        }
+    }
+
+    let roots: Vec<PlanNode> = nodes
+        .into_iter()
+        .filter(|(_, parent, _)| *parent == 0)
+        .map(|(_, _, n)| n)
+        .collect();
+    Ok(PlanNode {
+        label: "QUERY PLAN".into(),
+        detail: None,
+        rows: None,
+        time_ms: None,
+        cost: None,
+        extra: Vec::new(),
+        parallel: false,
+        children: roots,
+    })
 }
 
 pub fn run_query(path: &str, sql: &str) -> Result<QueryResult, String> {

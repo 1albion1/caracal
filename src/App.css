@@ -601,6 +601,236 @@ select:focus {
   justify-content: flex-end;
 }
 
+/* ---------- Plan flowchart ---------- */
+
+.plan-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.plan-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.plan-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.plan-legend-swatch {
+  width: 44px;
+  height: 10px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--bg-panel), rgba(229, 83, 75, 0.72));
+  border: 1px solid var(--border);
+}
+
+/* Top-down tree with connector lines (nested-list technique). */
+.plan-tree,
+.plan-tree ul {
+  display: flex;
+  padding-top: 20px;
+  position: relative;
+  justify-content: center;
+  margin: 0;
+  list-style: none;
+}
+
+.plan-tree li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  padding: 20px 12px 0;
+  list-style: none;
+}
+
+/* connectors from each child up to the horizontal line */
+.plan-tree li::before,
+.plan-tree li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: 20px;
+  border-top: 1px solid var(--border);
+}
+.plan-tree li::after {
+  right: auto;
+  left: 50%;
+  border-left: 1px solid var(--border);
+}
+.plan-tree li:only-child::before,
+.plan-tree li:only-child::after {
+  display: none;
+}
+.plan-tree li:only-child {
+  padding-top: 0;
+}
+.plan-tree li:first-child::before,
+.plan-tree li:last-child::after {
+  border: 0 none;
+}
+.plan-tree li:last-child::before {
+  border-right: 1px solid var(--border);
+}
+.plan-tree > li {
+  padding-top: 0;
+}
+.plan-tree > li::before,
+.plan-tree > li::after {
+  display: none;
+}
+/* vertical line dropping from a parent to its children row */
+.plan-tree ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 20px;
+  border-left: 1px solid var(--border);
+}
+
+.plan-node {
+  min-width: 150px;
+  max-width: 240px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.plan-node:hover {
+  border-color: var(--accent-hover);
+}
+
+.plan-node.selected {
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 2px var(--accent-hover);
+}
+
+.plan-detail {
+  width: 300px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow: auto;
+}
+
+.plan-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+}
+
+.plan-detail-title {
+  font-weight: 600;
+}
+
+.plan-detail-close {
+  display: flex;
+  padding: 2px;
+  border-radius: 3px;
+  color: var(--text-muted);
+}
+
+.plan-detail-close:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.plan-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.plan-detail-table td {
+  padding: 5px 12px;
+  border-bottom: 1px solid #2a2a2a;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.plan-detail-table td:first-child {
+  color: var(--text-muted);
+  white-space: nowrap;
+  width: 40%;
+}
+
+.plan-detail-table td:last-child {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.plan-node-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-parallel {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.plan-node-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.plan-metric-strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.plan-metric-share {
+  color: #f6b0a8;
+  font-weight: 600;
+}
+
+.plan-node-detail {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: Consolas, "Courier New", monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
 /* ---------- Status bar ---------- */
 
 .status-bar {

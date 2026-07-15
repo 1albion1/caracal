@@ -27,8 +27,13 @@ SQL Server and Azure SQL.
 - **PostgreSQL** — password auth with TLS support, full multi-database browsing
   (tables, views, materialized views)
 - **SQLite** — open existing files or create new databases with a native file picker
-- **Query editor** — syntax highlighting, autocompletion, `Ctrl+Enter` to run,
-  and SSMS-style **run-selection**: highlight part of a script and run only that
+- **Query editor** — syntax highlighting, schema-aware autocompletion,
+  `Ctrl+Enter` to run, and SSMS-style **run-selection**: highlight part of a
+  script and run only that
+- **Execution plans** — Explain (`Ctrl+Shift+Enter`) shows the estimated plan;
+  Analyze runs the query and shows the actual plan as a **heat-colored
+  flowchart** with real per-step timing (click a step for full metrics),
+  so you can see exactly where time is spent — including parallel operators
 - **Results grid** — virtualized scrolling through 10,000 rows without stutter,
   drag-to-resize columns, double-click to auto-fit
 - **Export** — save any result to CSV (Excel-compatible), Excel .xlsx, or JSON

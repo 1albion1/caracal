@@ -1,4 +1,4 @@
-use crate::models::{ColumnMeta, Connection, QueryResult, TableMeta};
+use crate::models::{ColumnMeta, Connection, PlanNode, QueryResult, TableMeta};
 use futures_util::TryStreamExt;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -301,6 +301,268 @@ pub async fn run_query(
         total_rows,
         duration_ms: started.elapsed().as_millis() as u64,
     })
+}
+
+/// Estimated execution plan via SHOWPLAN_ALL — does NOT execute the query,
+/// so it is safe to run on any statement. Returns the plan as a rowset.
+pub async fn explain(
+    conn: &Connection,
+    secret: Secret,
+    database: Option<&str>,
+    sql: &str,
+) -> Result<QueryResult, String> {
+    let trimmed = sql.trim().trim_end_matches(';').trim();
+    if trimmed.is_empty() {
+        return Err("Empty query.".into());
+    }
+    let mut client = connect(conn, secret, database).await?;
+    let started = Instant::now();
+
+    // SHOWPLAN_ALL must be its own batch; afterwards the next batch returns
+    // the estimated plan instead of executing.
+    client
+        .simple_query("SET SHOWPLAN_ALL ON")
+        .await
+        .map_err(|e| e.to_string())?
+        .into_results()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut stream = client.simple_query(trimmed).await.map_err(|e| e.to_string())?;
+    let mut columns: Vec<ColumnMeta> = Vec::new();
+    let mut out_rows: Vec<Vec<serde_json::Value>> = Vec::new();
+    let mut total_rows: i64 = 0;
+    while let Some(item) = stream.try_next().await.map_err(|e| e.to_string())? {
+        match item {
+            QueryItem::Metadata(meta) if meta.result_index() == 0 => {
+                columns = meta
+                    .columns()
+                    .iter()
+                    .map(|c| ColumnMeta {
+                        name: if c.name().is_empty() {
+                            "(no name)".into()
+                        } else {
+                            c.name().to_string()
+                        },
+                        data_type: column_type_name(c.column_type()).into(),
+                    })
+                    .collect();
+            }
+            QueryItem::Row(row) if row.result_index() == 0 => {
+                total_rows += 1;
+                if out_rows.len() < MAX_ROWS {
+                    let mut out = Vec::with_capacity(row.len());
+                    for data in row.into_iter() {
+                        out.push(cell_to_json(data));
+                    }
+                    out_rows.push(out);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(QueryResult {
+        columns,
+        rows: out_rows,
+        total_rows,
+        duration_ms: started.elapsed().as_millis() as u64,
+    })
+}
+
+/// Actual execution plan as a tree via STATISTICS XML — EXECUTES the query and
+/// parses the actual showplan XML, which carries real per-operator elapsed time
+/// (`ActualElapsedms`), actual rows, and parallelism info.
+pub async fn analyze_plan(
+    conn: &Connection,
+    secret: Secret,
+    database: Option<&str>,
+    sql: &str,
+) -> Result<PlanNode, String> {
+    let trimmed = sql.trim().trim_end_matches(';').trim();
+    if trimmed.is_empty() {
+        return Err("Empty query.".into());
+    }
+    let mut client = connect(conn, secret, database).await?;
+
+    client
+        .simple_query("SET STATISTICS XML ON")
+        .await
+        .map_err(|e| e.to_string())?
+        .into_results()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // The query's own result sets come first; the XML plan is the LAST set —
+    // a single row/cell of nvarchar (or xml).
+    let mut results = client
+        .simple_query(trimmed)
+        .await
+        .map_err(|e| e.to_string())?
+        .into_results()
+        .await
+        .map_err(|e| e.to_string())?;
+    let last = results.pop().unwrap_or_default();
+    let xml = last
+        .into_iter()
+        .next()
+        .and_then(|row| row.into_iter().next())
+        .map(cell_to_json)
+        .and_then(|v| v.as_str().map(str::to_string))
+        .ok_or("No execution plan XML was returned.")?;
+
+    parse_showplan(&xml)
+}
+
+fn parse_showplan(xml: &str) -> Result<PlanNode, String> {
+    let doc = roxmltree::Document::parse(xml)
+        .map_err(|e| format!("Could not parse execution plan XML: {e}"))?;
+    let root = doc
+        .descendants()
+        .find(|n| n.is_element() && n.tag_name().name() == "RelOp")
+        .ok_or("The execution plan contained no operators.")?;
+    Ok(build_xml_node(root))
+}
+
+/// Nearest descendant with the given local name, without crossing into a child
+/// RelOp (so each operator only sees its own metadata).
+fn nearest<'a, 'i>(
+    elem: roxmltree::Node<'a, 'i>,
+    name: &str,
+) -> Option<roxmltree::Node<'a, 'i>> {
+    for c in elem.children().filter(|n| n.is_element()) {
+        if c.tag_name().name() == "RelOp" {
+            continue;
+        }
+        if c.tag_name().name() == name {
+            return Some(c);
+        }
+        if let Some(found) = nearest(c, name) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// The direct child operators (RelOps) that feed this operator.
+fn child_relops<'a, 'i>(elem: roxmltree::Node<'a, 'i>) -> Vec<roxmltree::Node<'a, 'i>> {
+    let mut out = Vec::new();
+    for c in elem.children().filter(|n| n.is_element()) {
+        if c.tag_name().name() == "RelOp" {
+            out.push(c);
+        } else {
+            out.extend(child_relops(c));
+        }
+    }
+    out
+}
+
+fn strip_brackets(s: &str) -> String {
+    s.trim_matches(|c| c == '[' || c == ']').to_string()
+}
+
+fn build_xml_node(relop: roxmltree::Node) -> PlanNode {
+    let attr_f64 = |n: &roxmltree::Node, name: &str| -> Option<f64> {
+        n.attribute(name).and_then(|s| s.parse().ok())
+    };
+
+    let physical = relop.attribute("PhysicalOp").unwrap_or("Operator");
+    let logical = relop.attribute("LogicalOp");
+
+    // Table/index for scans and seeks, folded into the label.
+    let mut label = physical.to_string();
+    if let Some(obj) = nearest(relop, "Object") {
+        let table = obj.attribute("Table").map(strip_brackets);
+        let index = obj.attribute("Index").map(strip_brackets);
+        label = match (table, index) {
+            (Some(t), Some(i)) => format!("{physical} {t}.{i}"),
+            (Some(t), None) => format!("{physical} {t}"),
+            _ => label,
+        };
+    }
+
+    // Actual runtime counters: elapsed overlaps across threads (take max),
+    // rows accumulate (sum). Presence of >1 thread ⇒ ran in parallel.
+    let mut elapsed_ms: Option<f64> = None;
+    let mut actual_rows: Option<f64> = None;
+    let mut actual_execs: Option<f64> = None;
+    let mut thread_count = 0usize;
+    if let Some(rti) = nearest(relop, "RunTimeInformation") {
+        for t in rti
+            .children()
+            .filter(|n| n.is_element() && n.tag_name().name() == "RunTimeCountersPerThread")
+        {
+            thread_count += 1;
+            if let Some(e) = attr_f64(&t, "ActualElapsedms") {
+                elapsed_ms = Some(elapsed_ms.map_or(e, |m| m.max(e)));
+            }
+            if let Some(r) = attr_f64(&t, "ActualRows") {
+                actual_rows = Some(actual_rows.unwrap_or(0.0) + r);
+            }
+            if let Some(x) = attr_f64(&t, "ActualExecutions") {
+                actual_execs = Some(actual_execs.unwrap_or(0.0) + x);
+            }
+        }
+    }
+
+    let cost = attr_f64(&relop, "EstimatedTotalSubtreeCost");
+    let est_rows = attr_f64(&relop, "EstimateRows");
+    let rows = actual_rows.or(est_rows);
+    // A predicate/seek string makes a good one-line detail.
+    let detail = nearest(relop, "ScalarOperator")
+        .and_then(|s| s.attribute("ScalarString"))
+        .map(str::to_string)
+        .or_else(|| logical.map(str::to_string));
+    // Parallel if SQL Server flagged it or the operator used multiple threads
+    // (thread 0 is the coordinator, so >1 means real worker threads).
+    let parallel = relop.attribute("Parallel") == Some("1")
+        || relop.attribute("Parallel") == Some("true")
+        || thread_count > 1;
+
+    let mut extra: Vec<(String, String)> = Vec::new();
+    let mut push = |k: &str, v: String| extra.push((k.to_string(), v));
+    push("PhysicalOp", physical.to_string());
+    if let Some(l) = logical {
+        push("LogicalOp", l.to_string());
+    }
+    if let Some(e) = elapsed_ms {
+        push("Actual elapsed (ms)", format!("{e:.3}"));
+    }
+    if let Some(r) = actual_rows {
+        push("Actual rows", format!("{}", r as i64));
+    }
+    if let Some(er) = est_rows {
+        push("Estimated rows", format!("{er}"));
+    }
+    if let Some(x) = actual_execs {
+        push("Executions", format!("{}", x as i64));
+    }
+    if let Some(c) = cost {
+        push("Subtree cost (est.)", format!("{c:.4}"));
+    }
+    for a in ["EstimatedRowsRead", "EstimateCPU", "EstimateIO", "AvgRowSize"] {
+        if let Some(v) = relop.attribute(a) {
+            push(a, v.to_string());
+        }
+    }
+    if parallel {
+        push("Threads", thread_count.to_string());
+    }
+    if let Some(d) = &detail {
+        push("Predicate", d.clone());
+    }
+
+    let children = child_relops(relop).into_iter().map(build_xml_node).collect();
+
+    PlanNode {
+        label,
+        detail,
+        rows,
+        time_ms: elapsed_ms,
+        cost,
+        extra,
+        parallel,
+        children,
+    }
 }
 
 fn cell_to_json(data: ColumnData<'static>) -> serde_json::Value {

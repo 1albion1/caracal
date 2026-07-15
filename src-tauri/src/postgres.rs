@@ -1,4 +1,4 @@
-use crate::models::{ColumnMeta, Connection, QueryResult, TableMeta};
+use crate::models::{ColumnMeta, Connection, PlanNode, QueryResult, TableMeta};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -174,6 +174,118 @@ pub async fn list_tables(
         }
     }
     Ok(tables)
+}
+
+/// Estimated execution plan via EXPLAIN — planner only, does not execute the
+/// statement, so it is safe on any query. Rows come back under "QUERY PLAN".
+pub async fn explain(
+    conn: &Connection,
+    password: &str,
+    database: Option<&str>,
+    sql: &str,
+) -> Result<QueryResult, String> {
+    let trimmed = sql.trim().trim_end_matches(';').trim();
+    if trimmed.is_empty() {
+        return Err("Empty query.".into());
+    }
+    run_query(conn, password, database, &format!("EXPLAIN {trimmed}")).await
+}
+
+/// Actual execution plan as a tree via EXPLAIN (ANALYZE, FORMAT JSON) — EXECUTES
+/// the query and captures real per-node timing and row counts.
+pub async fn analyze_plan(
+    conn: &Connection,
+    password: &str,
+    database: Option<&str>,
+    sql: &str,
+) -> Result<PlanNode, String> {
+    let trimmed = sql.trim().trim_end_matches(';').trim();
+    if trimmed.is_empty() {
+        return Err("Empty query.".into());
+    }
+    let result = run_query(
+        conn,
+        password,
+        database,
+        &format!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {trimmed}"),
+    )
+    .await?;
+    let text = result
+        .rows
+        .first()
+        .and_then(|r| r.first())
+        .and_then(|v| v.as_str())
+        .ok_or("No plan returned.")?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(text).map_err(|e| format!("Could not parse plan: {e}"))?;
+    let plan = parsed
+        .get(0)
+        .and_then(|o| o.get("Plan"))
+        .ok_or("Plan tree missing from EXPLAIN output.")?;
+    Ok(pg_plan_node(plan))
+}
+
+fn pg_plan_node(v: &serde_json::Value) -> PlanNode {
+    let node_type = v.get("Node Type").and_then(|x| x.as_str()).unwrap_or("?");
+    let mut label = node_type.to_string();
+    if let Some(rel) = v.get("Relation Name").and_then(|x| x.as_str()) {
+        label = format!("{node_type} on {rel}");
+    }
+    if let Some(idx) = v.get("Index Name").and_then(|x| x.as_str()) {
+        label = format!("{label} using {idx}");
+    }
+    let loops = v.get("Actual Loops").and_then(|x| x.as_f64()).unwrap_or(1.0);
+    let time_ms = v
+        .get("Actual Total Time")
+        .and_then(|x| x.as_f64())
+        .map(|t| t * loops);
+    let rows = v
+        .get("Actual Rows")
+        .and_then(|x| x.as_f64())
+        .map(|r| r * loops)
+        .or_else(|| v.get("Plan Rows").and_then(|x| x.as_f64()));
+    let cost = v.get("Total Cost").and_then(|x| x.as_f64());
+    let detail = [
+        "Index Cond", "Filter", "Hash Cond", "Join Filter", "Recheck Cond", "Sort Key",
+    ]
+    .iter()
+    .find_map(|k| {
+        v.get(*k).and_then(|x| x.as_str()).map(|s| format!("{k}: {s}"))
+    });
+    // Everything the planner reported for this node (minus the child array).
+    let mut extra: Vec<(String, String)> = Vec::new();
+    if let Some(obj) = v.as_object() {
+        for (k, val) in obj {
+            if k == "Plans" {
+                continue;
+            }
+            let s = match val {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                _ => continue,
+            };
+            extra.push((k.clone(), s));
+        }
+    }
+    let parallel = v.get("Parallel Aware").and_then(|x| x.as_bool()).unwrap_or(false)
+        || v.get("Workers Planned").and_then(|x| x.as_f64()).unwrap_or(0.0) > 0.0
+        || v.get("Workers Launched").and_then(|x| x.as_f64()).unwrap_or(0.0) > 0.0;
+    let children = v
+        .get("Plans")
+        .and_then(|x| x.as_array())
+        .map(|arr| arr.iter().map(pg_plan_node).collect())
+        .unwrap_or_default();
+    PlanNode {
+        label,
+        detail,
+        rows,
+        time_ms,
+        cost,
+        extra,
+        parallel,
+        children,
+    }
 }
 
 pub async fn run_query(

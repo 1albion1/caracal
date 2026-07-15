@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0 — 2026-07-15
+
+- Explain button (and Ctrl+Shift+Enter): estimated execution plan as text,
+  without running the query — PostgreSQL `EXPLAIN`, SQL Server `SHOWPLAN_ALL`,
+  SQLite `EXPLAIN QUERY PLAN`.
+- Analyze button: runs the query and shows the actual execution plan as a
+  **graphical flowchart** — operators as connected boxes, heat-colored by how
+  much of the total time/cost each step itself takes, so the bottleneck stands
+  out. Click any step for a detail panel with all its metrics.
+  - PostgreSQL: real per-node milliseconds (`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`)
+  - SQL Server: real per-operator milliseconds parsed from the actual XML plan
+  - SQLite: plan structure (no per-step timing available)
+- Parallel operators are flagged with a badge; their time is measured as the
+  max elapsed across threads (they overlap) rather than summed.
+
 ## 0.4.0 — 2026-07-15
 
 - Export query results to CSV (Excel-compatible UTF-8 BOM), Excel .xlsx

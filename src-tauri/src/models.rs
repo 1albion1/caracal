@@ -41,6 +41,25 @@ pub struct TableMeta {
     pub columns: Vec<ColumnMeta>,
 }
 
+/// One operator in an execution plan tree, for the graphical plan view.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanNode {
+    pub label: String,
+    pub detail: Option<String>,
+    /// Rows produced (actual when available, else estimated).
+    pub rows: Option<f64>,
+    /// Actual time in ms, inclusive of children (PostgreSQL only).
+    pub time_ms: Option<f64>,
+    /// Subtree cost (SQL Server / PostgreSQL estimate).
+    pub cost: Option<f64>,
+    /// All raw per-operator attributes, for the detail panel (ordered key/value).
+    pub extra: Vec<(String, String)>,
+    /// True when this operator ran across multiple threads/workers.
+    pub parallel: bool,
+    pub children: Vec<PlanNode>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryResult {
