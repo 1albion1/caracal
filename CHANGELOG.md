@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — 2026-07-15
+
+- Cancel a running query: the Run button becomes a Stop button while a query
+  (or Analyze) is running. Cancelling drops the connection, which cancels the
+  work server-side on SQL Server and PostgreSQL.
+- Plan flowchart now labels each step with its **self time** (children
+  excluded), matching what the heat coloring represents.
+
 ## 0.5.0 — 2026-07-15
 
 - Explain button (and Ctrl+Shift+Enter): estimated execution plan as text,

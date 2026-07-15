@@ -53,6 +53,44 @@ fn keyring_entry(connection_id: &str) -> Result<keyring::Entry, String> {
         .map_err(|e| format!("Credential Manager unavailable: {e}"))
 }
 
+/// Cancellation tokens for in-flight queries, keyed by a frontend-supplied id.
+/// Cancelling drops the DB future (and its connection), which cancels the
+/// query server-side for SQL Server and PostgreSQL.
+#[derive(Default)]
+struct QueryRegistry(Mutex<HashMap<String, tokio_util::sync::CancellationToken>>);
+
+async fn run_cancellable<T, F>(
+    app: &tauri::AppHandle,
+    query_id: Option<String>,
+    fut: F,
+) -> Result<T, String>
+where
+    F: std::future::Future<Output = Result<T, String>>,
+{
+    let Some(id) = query_id else {
+        return fut.await;
+    };
+    let token = tokio_util::sync::CancellationToken::new();
+    app.state::<QueryRegistry>()
+        .0
+        .lock()
+        .unwrap()
+        .insert(id.clone(), token.clone());
+    let result = tokio::select! {
+        r = fut => r,
+        _ = token.cancelled() => Err("Query cancelled.".into()),
+    };
+    app.state::<QueryRegistry>().0.lock().unwrap().remove(&id);
+    result
+}
+
+#[tauri::command]
+fn cancel_query(registry: State<QueryRegistry>, query_id: String) {
+    if let Some(token) = registry.0.lock().unwrap().get(&query_id) {
+        token.cancel();
+    }
+}
+
 /// The Entra sign-in is shared by ALL Entra connections — the token covers
 /// the Azure SQL resource, not one server — so the user signs in once, ever.
 /// Access token cached in memory; refresh token DPAPI-encrypted on disk.
@@ -355,24 +393,29 @@ async fn run_query(
     connection_id: String,
     sql: String,
     database: Option<String>,
+    query_id: Option<String>,
 ) -> Result<QueryResult, String> {
     let connection = store.get(&connection_id).ok_or("Unknown connection.")?;
-    match connection.driver.as_str() {
-        "sqlite" => tauri::async_runtime::spawn_blocking(move || {
-            sqlite::run_query(&connection.database, &sql)
-        })
-        .await
-        .map_err(|e| e.to_string())?,
-        "mssql" => {
-            let secret = resolve_secret(&app, &connection).await?;
-            mssql::run_query(&connection, secret, database.as_deref(), &sql).await
+    let app2 = app.clone();
+    let fut = async move {
+        match connection.driver.as_str() {
+            "sqlite" => tauri::async_runtime::spawn_blocking(move || {
+                sqlite::run_query(&connection.database, &sql)
+            })
+            .await
+            .map_err(|e| e.to_string())?,
+            "mssql" => {
+                let secret = resolve_secret(&app2, &connection).await?;
+                mssql::run_query(&connection, secret, database.as_deref(), &sql).await
+            }
+            "postgres" => {
+                let password = stored_password(&connection).await?;
+                postgres::run_query(&connection, &password, database.as_deref(), &sql).await
+            }
+            other => Err(format!("Driver '{other}' is not supported yet.")),
         }
-        "postgres" => {
-            let password = stored_password(&connection).await?;
-            postgres::run_query(&connection, &password, database.as_deref(), &sql).await
-        }
-        other => Err(format!("Driver '{other}' is not supported yet.")),
-    }
+    };
+    run_cancellable(&app, query_id, fut).await
 }
 
 #[tauri::command]
@@ -409,24 +452,29 @@ async fn analyze_query(
     connection_id: String,
     sql: String,
     database: Option<String>,
+    query_id: Option<String>,
 ) -> Result<PlanNode, String> {
     let connection = store.get(&connection_id).ok_or("Unknown connection.")?;
-    match connection.driver.as_str() {
-        "sqlite" => {
-            tauri::async_runtime::spawn_blocking(move || sqlite::analyze_plan(&connection.database, &sql))
-                .await
-                .map_err(|e| e.to_string())?
+    let app2 = app.clone();
+    let fut = async move {
+        match connection.driver.as_str() {
+            "sqlite" => tauri::async_runtime::spawn_blocking(move || {
+                sqlite::analyze_plan(&connection.database, &sql)
+            })
+            .await
+            .map_err(|e| e.to_string())?,
+            "mssql" => {
+                let secret = resolve_secret(&app2, &connection).await?;
+                mssql::analyze_plan(&connection, secret, database.as_deref(), &sql).await
+            }
+            "postgres" => {
+                let password = stored_password(&connection).await?;
+                postgres::analyze_plan(&connection, &password, database.as_deref(), &sql).await
+            }
+            other => Err(format!("Driver '{other}' is not supported yet.")),
         }
-        "mssql" => {
-            let secret = resolve_secret(&app, &connection).await?;
-            mssql::analyze_plan(&connection, secret, database.as_deref(), &sql).await
-        }
-        "postgres" => {
-            let password = stored_password(&connection).await?;
-            postgres::analyze_plan(&connection, &password, database.as_deref(), &sql).await
-        }
-        other => Err(format!("Driver '{other}' is not supported yet.")),
-    }
+    };
+    run_cancellable(&app, query_id, fut).await
 }
 
 #[tauri::command]
@@ -485,6 +533,7 @@ pub fn run() {
             app.manage(ConnectionStore::load(config_dir.clone()));
             app.manage(RecentStore::load(config_dir));
             app.manage(TokenCache::default());
+            app.manage(QueryRegistry::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -497,6 +546,7 @@ pub fn run() {
             run_query,
             explain_query,
             analyze_query,
+            cancel_query,
             export_result,
             create_demo_database
         ])

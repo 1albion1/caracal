@@ -10,7 +10,7 @@ import { Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
-import { Download, Gauge, ListTree, Loader2, Play } from "lucide-react";
+import { Download, Gauge, ListTree, Play, Square } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import type { Driver, TableMeta } from "../types";
 
@@ -29,6 +29,8 @@ interface SqlEditorProps {
   onExplain(sqlOverride?: string): void;
   /** Runs the query and shows the actual plan with per-step timing. */
   onAnalyze(sqlOverride?: string): void;
+  /** Cancels the currently running query. */
+  onCancel(): void;
   onExport(): void;
 }
 
@@ -55,6 +57,7 @@ export function SqlEditor({
   onRun,
   onExplain,
   onAnalyze,
+  onCancel,
   onExport,
 }: SqlEditorProps) {
   const cmRef = useRef<ReactCodeMirrorRef>(null);
@@ -119,10 +122,17 @@ export function SqlEditor({
   return (
     <div className="editor-pane">
       <div className="editor-toolbar">
-        <button className="run-button" onClick={runFromButton} disabled={running}>
-          {running ? <Loader2 size={14} className="spin" /> : <Play size={14} />}
-          {running ? "Running…" : hasSelection ? "Run selection" : "Run"}
-        </button>
+        {running ? (
+          <button className="run-button run-stop" onClick={onCancel}>
+            <Square size={13} />
+            Stop
+          </button>
+        ) : (
+          <button className="run-button" onClick={runFromButton}>
+            <Play size={14} />
+            {hasSelection ? "Run selection" : "Run"}
+          </button>
+        )}
         <button
           className="btn btn-slim"
           onClick={explainFromButton}

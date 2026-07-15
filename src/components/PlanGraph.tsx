@@ -46,11 +46,13 @@ function PlanTreeNode({
 }) {
   const self = selfMetric(node);
   const fraction = max > 0 ? self / max : 0;
+  // Show the step's OWN time/cost (children subtracted), which is what the
+  // heat reflects — that's where the work in this step actually happens.
   const metricLabel =
     node.timeMs != null
-      ? `${fmt(node.timeMs)} ms`
+      ? `${fmt(self)} ms self`
       : node.cost != null
-        ? `cost ${fmt(node.cost)}`
+        ? `cost ${fmt(self)}`
         : null;
 
   return (
@@ -138,8 +140,8 @@ export function PlanGraph({ plan }: PlanGraphProps) {
         <div className="plan-legend">
           <span className="plan-legend-swatch" />
           {hasTiming
-            ? "Hotter = more of the total time spent in that step · click a step for details"
-            : "Relative cost per step · click a step for details"}
+            ? "Shows self time per step (children excluded) · hotter = slower · click a step for details"
+            : "Relative self cost per step · click a step for details"}
         </div>
         <ul className="plan-tree">
           <PlanTreeNode node={plan} max={max} selected={selected} onSelect={setSelected} />

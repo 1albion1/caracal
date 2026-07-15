@@ -37,6 +37,8 @@ SQL Server and Azure SQL.
 - **Results grid** — virtualized scrolling through 10,000 rows without stutter,
   drag-to-resize columns, double-click to auto-fit
 - **Export** — save any result to CSV (Excel-compatible), Excel .xlsx, or JSON
+- **Cancel running queries** — the Run button turns into Stop; cancelling
+  ends the work server-side (SQL Server, PostgreSQL)
 - **Query tabs** — work on several queries side by side
 - **Connection manager** — color-coded saved connections, recent-connection
   prefill, one-click seeded demo database
@@ -69,7 +71,6 @@ The UI renders in Windows' built-in WebView2 — no embedded Chromium.
 ## Roadmap
 
 - MySQL driver
-- Cancel running queries
 - Multiple result sets per batch
 - Copy rows as INSERT statements
 

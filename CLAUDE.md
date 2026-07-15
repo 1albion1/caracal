@@ -44,6 +44,12 @@ Rust side (`src-tauri/src/`):
   `db-manager`, account = connection id) — never in the connections file; they're
   saved in `add_connection` only after a successful test connect, deleted in
   `remove_connection`, and read back in `resolve_secret`.
+  **Cancellation**: `run_query`/`analyze_query` take an optional `query_id`;
+  `run_cancellable` registers a `CancellationToken` (in `QueryRegistry`) and
+  races the DB future against it via `tokio::select!`. `cancel_query` fires the
+  token; the losing branch is dropped, which drops the connection and cancels
+  server-side (mssql/postgres). SQLite runs on `spawn_blocking` so its blocking
+  work isn't interrupted — the UI detaches but the local op finishes on its own.
 - `mssql.rs` — SQL Server / Azure SQL driver (tiberius). Auth methods:
   `"sql"` (login+password), `"windows"` (`AuthMethod::Integrated`), `"entra"`
   (browser sign-in, see entra.rs).
@@ -153,9 +159,7 @@ and against Azure SQL with Entra browser sign-in.
 1. **Live-test the mssql driver** (see above) and fix whatever falls out.
 2. **Postgres/MySQL drivers** via `sqlx` — mssql.rs is the template; enable the
    dropdown options in `ConnectionDialog`.
-3. **Cancel running queries** — rusqlite `InterruptHandle` / tiberius cancel token,
-   a `cancel_query` command, wire the Run button to toggle to Stop.
-4. **Multiple result sets** — grid-per-result-set; mssql already drains them.
+3. **Multiple result sets** — grid-per-result-set; mssql already drains them.
 5. **Grid niceties** — column resize, sort by click, copy cell/row, export CSV.
 6. **Editor autocomplete from schema** — feed table/column names into CodeMirror's
    SQL extension (`schema` option of `@codemirror/lang-sql`).

@@ -24,11 +24,13 @@ export interface DataProvider {
   /** Databases on the server; empty for single-database drivers (sqlite). */
   listDatabases(connectionId: string): Promise<string[]>;
   listTables(connectionId: string, database?: string): Promise<TableMeta[]>;
-  runQuery(connectionId: string, sql: string, database?: string): Promise<QueryResult>;
+  runQuery(connectionId: string, sql: string, database?: string, queryId?: string): Promise<QueryResult>;
   /** Returns the estimated execution plan as a result set (does not execute the query). */
   explainQuery(connectionId: string, sql: string, database?: string): Promise<QueryResult>;
   /** Runs the query and returns the actual execution-plan tree (per-step timing/rows). */
-  analyzeQuery(connectionId: string, sql: string, database?: string): Promise<PlanNode>;
+  analyzeQuery(connectionId: string, sql: string, database?: string, queryId?: string): Promise<PlanNode>;
+  /** Requests cancellation of an in-flight run/analyze started with this id. */
+  cancelQuery(queryId: string): Promise<void>;
   /** Writes rows to a file (format by extension: csv/xlsx/json); returns row count. */
   exportResult(path: string, columns: string[], rows: CellValue[][]): Promise<number>;
 }

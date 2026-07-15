@@ -97,4 +97,6 @@ export interface QueryTab {
   plan: PlanNode | null;
   error: string | null;
   running: boolean;
+  /** Id of the in-flight query, used to cancel it; null when not running. */
+  queryId: string | null;
 }

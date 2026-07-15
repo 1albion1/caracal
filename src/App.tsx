@@ -24,6 +24,7 @@ function newTab(title?: string, sql = "", database: string | null = null): Query
     plan: null,
     error: null,
     running: false,
+    queryId: null,
   };
 }
 
@@ -143,15 +144,22 @@ function App() {
   const runQuery = useCallback(
     async (tabId: string, sql: string, database: string | null) => {
       if (!activeConnectionId) return;
-      patchTab(tabId, { running: true, error: null, plan: null });
+      const queryId = crypto.randomUUID();
+      patchTab(tabId, { running: true, error: null, plan: null, queryId });
       try {
-        const result = await provider.runQuery(activeConnectionId, sql, database ?? undefined);
-        patchTab(tabId, { running: false, result, error: null, plan: null });
+        const result = await provider.runQuery(
+          activeConnectionId,
+          sql,
+          database ?? undefined,
+          queryId,
+        );
+        patchTab(tabId, { running: false, result, error: null, plan: null, queryId: null });
       } catch (err) {
         patchTab(tabId, {
           running: false,
           result: null,
           error: err instanceof Error ? err.message : String(err),
+          queryId: null,
         });
       }
     },
@@ -179,20 +187,32 @@ function App() {
   const analyzeToGraph = useCallback(
     async (tabId: string, sql: string, database: string | null) => {
       if (!activeConnectionId) return;
-      patchTab(tabId, { running: true, error: null });
+      const queryId = crypto.randomUUID();
+      patchTab(tabId, { running: true, error: null, queryId });
       try {
-        const plan = await provider.analyzeQuery(activeConnectionId, sql, database ?? undefined);
-        patchTab(tabId, { running: false, plan, result: null, error: null });
+        const plan = await provider.analyzeQuery(
+          activeConnectionId,
+          sql,
+          database ?? undefined,
+          queryId,
+        );
+        patchTab(tabId, { running: false, plan, result: null, error: null, queryId: null });
       } catch (err) {
         patchTab(tabId, {
           running: false,
           plan: null,
           error: err instanceof Error ? err.message : String(err),
+          queryId: null,
         });
       }
     },
     [activeConnectionId, patchTab],
   );
+
+  const cancelActiveTab = useCallback(() => {
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (tab?.queryId) void provider.cancelQuery(tab.queryId);
+  }, [tabs, activeTabId]);
 
   const runActiveTab = useCallback(
     (sqlOverride?: string) => {
@@ -408,6 +428,7 @@ function App() {
                 onRun={runActiveTab}
                 onExplain={explainActiveTab}
                 onAnalyze={analyzeActiveTab}
+                onCancel={cancelActiveTab}
                 onExport={() => void exportActiveResult()}
               />
             </div>

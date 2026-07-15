@@ -240,7 +240,7 @@ export const mockProvider: DataProvider = {
     } satisfies QueryResult;
   },
 
-  async analyzeQuery(_connectionId: string, _sql: string, _database?: string) {
+  async analyzeQuery(_connectionId: string, _sql: string, _database?: string, _queryId?: string) {
     await delay(160);
     return {
       label: "Hash Join",
@@ -291,7 +291,11 @@ export const mockProvider: DataProvider = {
     };
   },
 
-  async runQuery(_connectionId: string, sql: string, _database?: string) {
+  async cancelQuery(_queryId: string) {
+    // The mock runs instantly; nothing to cancel.
+  },
+
+  async runQuery(_connectionId: string, sql: string, _database?: string, _queryId?: string) {
     const started = performance.now();
     await delay(120 + Math.random() * 250);
 

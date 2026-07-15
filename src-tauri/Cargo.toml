@@ -1,6 +1,6 @@
 [package]
 name = "caracal"
-version = "0.5.0"
+version = "0.6.0"
 description = "A fast, featherlight SQL client for Windows"
 authors = ["Albion Berisha"]
 edition = "2021"
@@ -29,7 +29,7 @@ tiberius = { version = "0.12", features = ["sql-browser-tokio", "chrono"] }
 tokio-postgres = "0.7"
 postgres-native-tls = "0.5"
 native-tls = "0.2"
-tokio = { version = "1", features = ["net", "time", "io-util"] }
+tokio = { version = "1", features = ["net", "time", "io-util", "macros"] }
 tokio-util = { version = "0.7", features = ["compat"] }
 futures-util = "0.3"
 chrono = "0.4"

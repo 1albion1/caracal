@@ -444,6 +444,14 @@ select:focus {
   background: var(--accent-hover);
 }
 
+.run-stop {
+  background: #a1260d;
+}
+
+.run-stop:hover {
+  background: #c42b0e;
+}
+
 .run-button:disabled {
   opacity: 0.6;
   cursor: default;
