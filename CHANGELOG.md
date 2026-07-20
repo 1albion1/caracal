@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.2 — 2026-07-15
+
+- Live elapsed timer in the status bar while a query runs (appears once it has
+  been running for more than half a second), so you can see how long a slow
+  query has been going.
+
 ## 0.6.1 — 2026-07-15
 
 - Refresh button on the Databases list in the sidebar — re-fetches the

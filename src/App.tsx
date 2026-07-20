@@ -25,6 +25,7 @@ function newTab(title?: string, sql = "", database: string | null = null): Query
     error: null,
     running: false,
     queryId: null,
+    startedAt: null,
   };
 }
 
@@ -71,6 +72,16 @@ function App() {
 
   const activeConnection = connections.find((c) => c.id === activeConnectionId) ?? null;
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+
+  // Tick a few times a second while the active tab runs, to drive a live timer.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (!activeTab?.running) return;
+    const id = window.setInterval(() => forceTick((n) => n + 1), 200);
+    return () => window.clearInterval(id);
+  }, [activeTab?.running]);
+  const runningMs =
+    activeTab?.running && activeTab.startedAt ? Date.now() - activeTab.startedAt : null;
 
   useEffect(() => {
     provider.listConnections().then((conns) => {
@@ -150,7 +161,7 @@ function App() {
     async (tabId: string, sql: string, database: string | null) => {
       if (!activeConnectionId) return;
       const queryId = crypto.randomUUID();
-      patchTab(tabId, { running: true, error: null, plan: null, queryId });
+      patchTab(tabId, { running: true, error: null, plan: null, queryId, startedAt: Date.now() });
       try {
         const result = await provider.runQuery(
           activeConnectionId,
@@ -174,7 +185,7 @@ function App() {
   const explainToGrid = useCallback(
     async (tabId: string, sql: string, database: string | null) => {
       if (!activeConnectionId) return;
-      patchTab(tabId, { running: true, error: null, plan: null });
+      patchTab(tabId, { running: true, error: null, plan: null, startedAt: Date.now() });
       try {
         const result = await provider.explainQuery(activeConnectionId, sql, database ?? undefined);
         patchTab(tabId, { running: false, result, error: null, plan: null });
@@ -193,7 +204,7 @@ function App() {
     async (tabId: string, sql: string, database: string | null) => {
       if (!activeConnectionId) return;
       const queryId = crypto.randomUUID();
-      patchTab(tabId, { running: true, error: null, queryId });
+      patchTab(tabId, { running: true, error: null, queryId, startedAt: Date.now() });
       try {
         const plan = await provider.analyzeQuery(
           activeConnectionId,
@@ -460,6 +471,7 @@ function App() {
           connection={activeConnection}
           database={activeTab?.database ?? activeDatabase}
           tab={activeTab}
+          runningMs={runningMs}
           notice={notice}
         />
       </div>

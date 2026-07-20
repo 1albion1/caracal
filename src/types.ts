@@ -99,4 +99,6 @@ export interface QueryTab {
   running: boolean;
   /** Id of the in-flight query, used to cancel it; null when not running. */
   queryId: string | null;
+  /** Epoch ms when the current run started, for the live elapsed timer. */
+  startedAt: number | null;
 }
