@@ -49,6 +49,7 @@ function App() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null);
   const [databases, setDatabases] = useState<string[]>([]);
+  const [databasesLoading, setDatabasesLoading] = useState(false);
   const [activeDatabase, setActiveDatabase] = useState<string | null>(null);
   const [tables, setTables] = useState<TableMeta[]>([]);
   const [tablesLoading, setTablesLoading] = useState(false);
@@ -78,28 +79,32 @@ function App() {
     });
   }, []);
 
-  // Load the server's database list when the connection changes.
+  // Fetch the server's database list; keeps the current selection if it still
+  // exists (so a manual refresh doesn't jump you to another database).
+  const loadDatabases = useCallback(async () => {
+    if (!activeConnectionId) return;
+    setDatabasesLoading(true);
+    const preferred = connections.find((c) => c.id === activeConnectionId)?.database;
+    try {
+      const dbs = await provider.listDatabases(activeConnectionId);
+      setDatabases(dbs);
+      setActiveDatabase((current) => {
+        if (current && dbs.includes(current)) return current;
+        if (dbs.length === 0) return null;
+        return preferred && dbs.includes(preferred) ? preferred : dbs[0];
+      });
+    } catch (err) {
+      setTablesError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDatabasesLoading(false);
+    }
+  }, [activeConnectionId, connections]);
+
+  // Reload the list from scratch whenever the active connection changes.
   useEffect(() => {
     setDatabases([]);
     setActiveDatabase(null);
-    if (!activeConnectionId) return;
-    let stale = false;
-    const preferred = connections.find((c) => c.id === activeConnectionId)?.database;
-    provider
-      .listDatabases(activeConnectionId)
-      .then((dbs) => {
-        if (stale) return;
-        setDatabases(dbs);
-        if (dbs.length > 0) {
-          setActiveDatabase(preferred && dbs.includes(preferred) ? preferred : dbs[0]);
-        }
-      })
-      .catch((err) => {
-        if (!stale) setTablesError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      stale = true;
-    };
+    void loadDatabases();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnectionId]);
 
@@ -397,6 +402,8 @@ function App() {
         onCreateDemo={() => void createDemo()}
         demoBusy={demoBusy}
         databases={databases}
+        databasesLoading={databasesLoading}
+        onRefreshDatabases={() => void loadDatabases()}
         activeDatabase={activeDatabase}
         onSelectDatabase={setActiveDatabase}
         tables={tables}

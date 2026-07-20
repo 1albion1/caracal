@@ -22,7 +22,7 @@ SQL Server and Azure SQL.
   - SQL login, Windows Authentication, or **Microsoft Entra ID with browser
     sign-in** (like SSMS's "Entra MFA" — sign in once, stay signed in)
   - Multi-database servers: browse and switch between all databases on a server,
-    with instant name filtering
+    with instant name filtering and a refresh button
   - Named instances (`server\SQLEXPRESS`) resolved automatically via SQL Browser
 - **PostgreSQL** — password auth with TLS support, full multi-database browsing
   (tables, views, materialized views)

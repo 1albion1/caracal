@@ -1,6 +1,6 @@
 [package]
 name = "caracal"
-version = "0.6.0"
+version = "0.6.1"
 description = "A fast, featherlight SQL client for Windows"
 authors = ["Albion Berisha"]
 edition = "2021"

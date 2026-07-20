@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 — 2026-07-15
+
+- Refresh button on the Databases list in the sidebar — re-fetches the
+  server's databases without reconnecting, keeping your current selection if
+  it still exists.
+
 ## 0.6.0 — 2026-07-15
 
 - Cancel a running query: the Run button becomes a Stop button while a query

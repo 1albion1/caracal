@@ -5,6 +5,7 @@ import {
   Eye,
   Layers,
   Plus,
+  RefreshCw,
   Table2,
   Terminal,
   Trash2,
@@ -21,6 +22,8 @@ interface SidebarProps {
   onCreateDemo(): void;
   demoBusy: boolean;
   databases: string[];
+  databasesLoading: boolean;
+  onRefreshDatabases(): void;
   activeDatabase: string | null;
   onSelectDatabase(db: string): void;
   tables: TableMeta[];
@@ -52,6 +55,8 @@ export function Sidebar({
   onCreateDemo,
   demoBusy,
   databases,
+  databasesLoading,
+  onRefreshDatabases,
   activeDatabase,
   onSelectDatabase,
   tables,
@@ -145,6 +150,14 @@ export function Sidebar({
           <div className="sidebar-section-title">
             Databases
             <span className="tree-count">{databases.length}</span>
+            <button
+              className="sidebar-add"
+              onClick={onRefreshDatabases}
+              disabled={databasesLoading}
+              title="Refresh database list"
+            >
+              <RefreshCw size={13} className={databasesLoading ? "spin" : ""} />
+            </button>
           </div>
           <input
             className="table-filter"
